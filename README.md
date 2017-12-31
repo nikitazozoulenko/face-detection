@@ -1,1 +1,0 @@
-# pytorch-face-recognition
