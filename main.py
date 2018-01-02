@@ -12,24 +12,15 @@ import torchvision
 from torchvision import  datasets, models, transforms
 import matplotlib.pyplot as plt
 
-class DetectionNetwork(nn.Module):
-    def __init__(self):
-        super(DetectionNetwork, self).__init__()
-        resnet = models.resnet50(pretrained=True)
-        modules = list(resnet.children())[:8] # delete the last layers.
-        self.resnet_features = nn.Sequential(*modules)
-        B = 5 #anchor boxes
-        K = 1 #number of classes
-        self.last_conv = nn.Conv2d(2048, B*(K+1+4), kernel_size=3, stride=2, padding=1, bias=False)
-        
-    def forward(self, x):
-        x = self.resnet_features(x)
-        x = self.last_conv(x)
-        return x
+from detection_network import *
+from data_feeder import DataFeeder
 
 model = DetectionNetwork().cuda()
+data_feeder = DataFeeder(preprocess_workers = 12, cuda_workers = 1, numpy_size = 12, cuda_size = 3, batch_size = 128)
+data_feeder.start_queue_threads()
 
-for i in range(448, 449):
-    inp = Variable(torch.ones(2,3,i,i)).cuda()
-    features = model(inp)
-    print(i, features.size())
+for i in range(100):
+    _, batch = data_feeder.get_batch()
+    print("BATCH", _)
+
+data_feeder.kill_queue_threads()
