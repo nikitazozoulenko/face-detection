@@ -14,13 +14,23 @@ import matplotlib.pyplot as plt
 
 from detection_network import *
 from data_feeder import DataFeeder
+from util_detection import *
 
 model = DetectionNetwork().cuda()
-data_feeder = DataFeeder(preprocess_workers = 12, cuda_workers = 1, numpy_size = 12, cuda_size = 3, batch_size = 128)
+loss = Loss().cuda()
+data_feeder = DataFeeder(preprocess_workers = 12, cuda_workers = 1, numpy_size = 8, cuda_size = 2, batch_size = 2)
 data_feeder.start_queue_threads()
 
-for i in range(100):
-    _, batch = data_feeder.get_batch()
-    print("BATCH", _)
+for i in range(1):
+    _, (batch) = data_feeder.get_batch()
+    images, gt, num_objects = batch
+    boxes, classes = model(images)
+    it_loss = loss(0.001, boxes, classes, gt, num_objects)
+    
+    #draw_and_show_boxes(images.cpu().data.numpy(), boxes.cpu().data.numpy(), 1, "red")
+    
+    draw_big(images.cpu().data.numpy(), gt[0, 0:num_objects[0]].cpu().data.numpy(), 3, "red")
+    draw_big(images.cpu().data.numpy(), boxes[0].cpu().data.numpy(), 3, "blue")
+    
 
 data_feeder.kill_queue_threads()

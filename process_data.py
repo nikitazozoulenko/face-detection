@@ -31,8 +31,8 @@ def get_paths():
                     line = line.split()
                     gt_unprocessed[image_count, i, 0] = float(line[0]) #xmin
                     gt_unprocessed[image_count, i, 1] = float(line[1]) #ymin
-                    gt_unprocessed[image_count, i, 2] = float(line[0]) + float(line[2]) #xmax = xmin + width
-                    gt_unprocessed[image_count, i, 3] = float(line[1]) + float(line[3]) #ymax = ymin + height
+                    gt_unprocessed[image_count, i, 2] = float(line[2]) #width
+                    gt_unprocessed[image_count, i, 3] = float(line[3]) #height
                     i += 1
                     
     paths = [[images_filenames[i], gt_unprocessed[i], im_num_objects[i]] for i in range(len(images_filenames))]
@@ -55,15 +55,9 @@ def read_image_and_label(path):
     gt[:, 3:4] = gt[:, 3:4] / im_height
 
     if(random == 0):
-        image = ImageOps.mirror(image)
-
-        temp_xmin = np.copy(gt[:num_objects, 0:1])
-        temp_xmax = np.copy(gt[:num_objects, 2:3])
-        
-        #xmin = 1-xmax
-        gt[:num_objects, 0:1] = 1 - temp_xmax
-        #xmax = 1-xmin
-        gt[:num_objects, 2:3] = 1 - temp_xmin
+        image = ImageOps.mirror(image)    
+        #xmin = 1-xmin-width
+        gt[:num_objects, 0:1] = 1 - gt[:num_objects, 0:1] - gt[:num_objects, 2:3]
         
     image_array = np.asarray(image)
     gt = gt.astype(np.float32)
@@ -71,13 +65,17 @@ def read_image_and_label(path):
     return image_array, gt, num_objects
 
 def make_batch_from_list(images, gt, num_objects):
-    resize_size = (224, 244)
+    width = 224
+    random = np.random.randint(0,13)
+    random = 0
+    width = 64
+    resize_size = (width + 32*random, width + 32*random)
     resized_images = [np.asarray(Image.fromarray(image).resize(resize_size)) for image in images]
     
     max_batch_objects  = max(num_objects)
     gt = np.array(gt)[:, 0:max_batch_objects, :]
     
-    return np.array(resized_images).astype(np.float32), gt
+    return np.array(resized_images).astype(np.float32), gt, np.array(num_objects)
     
     
 

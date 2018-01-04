@@ -92,8 +92,8 @@ class InputGen:
                         self.labels.append(label)
                         self.num_objects.append(num_objs)
                     if len(self.images) % self.batch_size == 0:					
-                        batch_imgages, batch_labels = make_batch_from_list(self.images, self.labels, self.num_objects)
-                        yield batch_imgages, batch_labels
+                        batch_imgages, batch_labels, batch_num_objects = make_batch_from_list(self.images, self.labels, self.num_objects)
+                        yield batch_imgages, batch_labels, batch_num_objects
                         self.images, self.labels, self.num_objects = [], [], []
 	    #At the end of an epoch we re-init data-structures
             with self.lock: 
@@ -121,9 +121,9 @@ def threaded_batches_feeder(tokill, batches_queue, dataset_generator):
     batches_queue is a limited size thread-safe Queue instance.
     """
     while tokill() == False:
-        for batch, (batch_images, batch_labels) in enumerate(dataset_generator):
+        for batch, (batch_images, batch_labels, batch_num_objects) in enumerate(dataset_generator):
             #We fill the queue with new fetched batch until we reach the max size.
-            batches_queue.put((batch, (batch_images, batch_labels)), block=True)
+            batches_queue.put((batch, (batch_images, batch_labels, batch_num_objects)), block=True)
             if tokill() == True:
                 return
 
@@ -133,14 +133,14 @@ def threaded_cuda_batches(tokill,cuda_batches_queue,batches_queue):
     cuda_batches_queue receives numpy cpu tensors and transfers them to GPU space.
     """
     while tokill() == False:
-        batch, (batch_images, batch_labels) = batches_queue.get(block=True)
+        batch, (batch_images, batch_labels, batch_num_objects) = batches_queue.get(block=True)
         batch_images_np = np.transpose(batch_images, (0, 3, 1, 2))
         batch_images = torch.from_numpy(batch_images_np)
         batch_labels = torch.from_numpy(batch_labels)
         
         batch_images = Variable(batch_images).cuda()
         batch_labels = Variable(batch_labels).cuda()
-        cuda_batches_queue.put((batch, (batch_images, batch_labels)), block=True)
+        cuda_batches_queue.put((batch, (batch_images, batch_labels, batch_num_objects)), block=True)
         if tokill() == True:
             return
 
