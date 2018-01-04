@@ -60,7 +60,6 @@ class CreateBoxesWithAnchors(nn.Module):
 
         #boxes = torch.cat((xmin, ymin, width, height), dim=1).expand((R, -1, -1))
         boxes = torch.cat((xmin, ymin, width, height), dim=2)
-        print(boxes)
         return boxes, classes
     
     
@@ -89,60 +88,68 @@ class DetectionNetwork(nn.Module):
         x = self.BN1(x)
         x = self.resnet_features(x)
         x = self.BNFeatures(x)
-        offsets = self.regressor_head(x)
+        offsets = self.regressor_head(x) / 100
         classes = self.classification_head(x)
         classes = self.softmax(classes)
         boxes, classes = self.create_boxes_with_anchors(offsets, self.anchors, classes)
         return boxes, classes
 
-class FocalLoss(nn.Module):
+class ClassLoss(nn.Module):
     def __init__(self):
-        super(FocalLoss, self).__init__()
+        super(ClassLoss, self).__init__()
 
-    def forward(self, pred, gt):
+    def forward(self, classes, positive_idx):
         pass
-    
+
+class CoordLoss(nn.Module):
+    def __init__(self):
+        super(CoordLoss, self).__init__()
+
+    def forward(self, boxes, gt, positive_idx):
+        pass
+
 class Loss(nn.Module):
     def __init__(self):
         super(Loss, self).__init__()
+        self.class_loss = ClassLoss()
+        self.coord_loss = CoordLoss()
+
+def match(boxes, classes, gt, num_objects):
+    pred_boxes, gt_boxes = from_xywh_to_xyxy(boxes, gt)
+    ious = jaccard(pred_boxes, gt_boxes)
+
+    best_gt_iou, best_gt_idx = ious.max(0)
+    arange = torch.arange(0, num_objects, out=torch.LongTensor())
+    arange = Variable(arange).cuda()
+    arange = torch.stack((best_gt_idx, arange), dim=1)
+
+    positive_mask = ious > threshhold
+
+    for i in range(arange.size(0)):
+        box_idx = arange[i, 0]
+        arange_idx = arange[i, 1]
+        positive_mask[box_idx, arange_idx] = 1
+
+    positive_idx = torch.nonzero(positive_mask)
+    return positive_idx
 
     def forward(self, threshhold, batch_boxes, batch_classes, batch_gt, batch_num_objects):
         #batch_boxes,      size [batch_size,       S*S*A,  4]
         #batch_classes,    size [batch_size,       S*S*A,  K+1]
         #batch_gt,         size [batch_size, max_num_obj,  4]
         #batch_num_objects size [batch_size, max_num_obj]
-        threshhold = 0.5
+        threshhold = 0.8
         R = list(batch_boxes.size())[0]
+        loss = Variable(torch.zero(1)).cuda()
         
         for boxes, classes, gt, num_objects in zip(batch_boxes, batch_classes, batch_gt, batch_num_objects):
             gt = gt[:num_objects]
+            positive_idx = match(boxes, classes, gt, int(num_objects))
+            loss += class_loss(classes, positive_idx)
+            loss += coord_loss(boxes, gt, positive_idx)
 
-            pred_boxes, gt_boxes = from_xywh_to_xyxy(boxes, gt)
-            ious = jaccard(pred_boxes, gt_boxes)
-            print("IOUS", ious)
-
-            positive_mask = ious > threshhold
-            negative_mask = ious < threshhold
-
-            positive_idx = torch.nonzero(positive_mask)
-            negative_idx = torch.nonzero(negative_mask)
-            print("NEG IDX", negative_idx)
-            print("POS IDX", positive_idx)
-            
-                                                         
+        return loss
 
 
-            
-        # #scores, idx = torch.topk(x, 2, 0, sorted=True)
-
-        return 0
-
-class PositiveLoss(nn.Module):
-    def __init__(self):
-        super(PositiveLoss, self).__init__()
-
-class NegativeLoss(nn.Module):
-    def __init__(self):
-        super(NegativeLoss, self).__init__()
         
         
