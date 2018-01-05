@@ -25,7 +25,7 @@ for i in range(1):
     _, (batch) = data_feeder.get_batch()
     images, gt, num_objects = batch
     boxes, classes = model(images)
-    it_loss = loss(0.001, boxes, classes, gt, num_objects)
+    total_loss, class_loss, coord_loss = loss(0.001, boxes, classes, gt, num_objects)
     
     #draw_and_show_boxes(images.cpu().data.numpy(), boxes.cpu().data.numpy(), 1, "red")
     
