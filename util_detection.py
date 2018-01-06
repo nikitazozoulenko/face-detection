@@ -4,55 +4,26 @@ from PIL import Image, ImageDraw
 import torch
 from torch.autograd import Variable
 
-def draw_and_show_boxes(image_array, boxes, border_size, color):
-    image_array = np.transpose(image_array, (0, 2, 3, 1))
-    print(image_array.shape)
-    for image, im_boxes in zip(image_array, boxes):
-        im = Image.fromarray((image).astype(np.uint8))
-        width, height = im.size
-        im.show()
+def draw_and_show_boxes(image, boxes, border_size, color):
+    image = image[0]
+    image = np.transpose(image, (1, 2, 0))
     
-        dr = ImageDraw.Draw(im)
-        im_boxes = (im_boxes * width).astype(int)
-        for box in im_boxes:
-            x0 = box[0]
-            y0 = box[1]
-            x1 = x0 + box[2]
-            y1 = y0 + box[3]
-
-            for j in range(border_size):
-                final_coords = [x0+j, y0+j, x1-j, y1-j]
-                dr.rectangle(final_coords, outline = color)
-        im.show()
-
-def draw_big(image_array, boxes, border_size, color):
-    image_array = np.transpose(image_array, (0, 2, 3, 1))
-    for _ in range(1):
-        image = image_array[0]
-        im_boxes = boxes
-        im = Image.fromarray((image).astype(np.uint8))
-        width = 600
-        im = im.resize((width, width))
-        im.show()
+    im = Image.fromarray((image).astype(np.uint8))
+    width, height = im.size
+    im.show()
     
-        dr = ImageDraw.Draw(im)
-        im_boxes = (im_boxes * width).astype(int)
-        for box in im_boxes:
-            
-            xmin = box[0]
-            ymin = box[1]
-            xmax = xmin+ box[2]
-            ymax = ymin + box[3]
+    dr = ImageDraw.Draw(im)
+    boxes = (boxes * width).astype(int)
+    for box in boxes:
+        x0 = box[0]
+        y0 = box[1]
+        x1 = x0 + box[2]
+        y1 = y0 + box[3]
 
-            x0 = min(xmin, xmax)
-            y0 = min(ymin, ymax)
-            x1 = max(xmin, xmax)
-            y1 = max(ymin, ymax)
-
-            for j in range(border_size):
-                final_coords = [x0+j, y0+j, x1-j, y1-j]
-                dr.rectangle(final_coords, outline = color)
-        im.show()
+        for j in range(border_size):
+            final_coords = [x0+j, y0+j, x1-j, y1-j]
+            dr.rectangle(final_coords, outline = color)
+    im.show()
 
 def from_xywh_to_xyxy(boxes0, boxes1):
     xmin0 = boxes0[:, 0:1]
@@ -65,6 +36,7 @@ def from_xywh_to_xyxy(boxes0, boxes1):
     xmax1 = xmin1 + boxes1[:, 2:3]
     ymax1 = ymin1 + boxes1[:, 3:4]
     return torch.cat((xmin0, ymin0, xmax0, ymax0), dim=1), torch.cat((xmin1, ymin1, xmax1, ymax1), dim=1)
+
 
 # def box_set_iou(boxes0, boxes1):
 #     """

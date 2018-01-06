@@ -11,7 +11,6 @@ from util_detection import *
 class CreateBoxesWithAnchors(nn.Module):
     def __init(self):
         super(CreateBoxesWithAnchorsAndOffsets, self).__init()
-        self.A = 15
 
     def forward(self, batch_offsets, anchors, classes):
         #offsets       shape [batch_size, 4A, S, S]
@@ -61,7 +60,27 @@ class CreateBoxesWithAnchors(nn.Module):
         #boxes = torch.cat((xmin, ymin, width, height), dim=1).expand((R, -1, -1))
         boxes = torch.cat((xmin, ymin, width, height), dim=2)
         return boxes, classes
+
+
+
+
     
+def process_boxes(boxes, classes):
+    #batch_boxes,      size [batch_size,       S*S*A,  4]
+    #batch_classes,    size [batch_size,       S*S*A,  K+1]
+    boxes = boxes[0, :, :]
+    classes = classes[0, :, :]
+    
+    mask = classes > 0.5
+    idx = mask[:, 1].nonzero().squeeze()
+    print("idx", idx)
+    try:
+        selected_boxes = boxes.index_select(0, idx)
+        selected_classes = classes.index_select(0, idx)
+        return selected_boxes, selected_classes
+    except RuntimeError:
+        print("idx empty")
+        return boxes, classes
     
 class DetectionNetwork(nn.Module):
     def __init__(self):
@@ -84,7 +103,7 @@ class DetectionNetwork(nn.Module):
                                               [0.1,0.05],   [0.1,0.1],   [0.05,0.1],
                                               [0.05,0.025], [0.05,0.05], [0.025,0.05]]), requires_grad=False).cuda()
         
-    def forward(self, x):
+    def forward(self, x, phase = "train"):
         x = self.BN1(x)
         x = self.resnet_features(x)
         x = self.BNFeatures(x)
@@ -92,6 +111,8 @@ class DetectionNetwork(nn.Module):
         classes = self.classification_head(x)
         boxes, classes = self.create_boxes_with_anchors(offsets, self.anchors, classes)
         classes = self.softmax(classes)
+        if phase == "test":
+            boxes, classes = process_boxes(boxes, classes)
         return boxes, classes
 
 class ClassLoss(nn.Module):
@@ -100,7 +121,6 @@ class ClassLoss(nn.Module):
 
     def forward(self, classes, positive_idx):
         gamma = 2
-        alpha = 1
         
         positive_idx = positive_idx[:,0]
 
@@ -114,13 +134,15 @@ class ClassLoss(nn.Module):
         probs = classes[mask]
 
         #focal loss described in paper "Focal Loss for Dense Object Detection"
-        focal_loss = -alpha * (1-probs).pow(gamma) * probs.log()
-        return torch.sum(focal_loss)
+        focal_loss = -(1-probs).pow(gamma) * probs.log()
+        extra = focal_loss.index_select(0, positive_idx)
+        
+        return torch.sum(focal_loss) + torch.sum(extra)
 
 class CoordLoss(nn.Module):
     def __init__(self):
         super(CoordLoss, self).__init__()
-        self.smooth_l1_loss = nn.SmoothL1Loss(size_average=False)
+        self.l1_loss = nn.L1Loss(size_average=False)
 
     def forward(self, boxes, gt, positive_idx):
         #boxes,       size [S*S*A,       4]
@@ -132,7 +154,7 @@ class CoordLoss(nn.Module):
         selected_pred = boxes.index_select(0, pred_idx)
         selected_gt = gt.index_select(0, gt_idx)
 
-        coord_loss = self.smooth_l1_loss(selected_pred, selected_gt)
+        coord_loss = self.l1_loss(selected_pred, selected_gt)
         return coord_loss
 
 def match(threshhold, boxes, classes, gt, num_objects):
@@ -170,8 +192,9 @@ class Loss(nn.Module):
         #batch_classes,    size [batch_size,       S*S*A,  K+1]
         #batch_gt,         size [batch_size, max_num_obj,  4]
         #batch_num_objects size [batch_size, max_num_obj]
-        threshhold = 0.8
-        R = list(batch_boxes.size())[0]
+        ALPHA_CLASS = 0.01
+        ALPHA_COORD = 1
+        R = batch_boxes.size(0)
         class_loss = Variable(torch.zeros(1)).cuda()
         coord_loss = Variable(torch.zeros(1)).cuda()
         
@@ -181,6 +204,8 @@ class Loss(nn.Module):
             class_loss += self.class_loss(classes, positive_idx)
             coord_loss += self.coord_loss(boxes, gt, positive_idx)
 
+        class_loss = class_loss * ALPHA_CLASS / R
+        coord_loss = coord_loss * ALPHA_COORD / R
         total_loss = class_loss + coord_loss
         return total_loss, class_loss, coord_loss
 
