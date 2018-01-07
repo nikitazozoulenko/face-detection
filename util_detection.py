@@ -5,37 +5,81 @@ import torch
 from torch.autograd import Variable
 
 def draw_and_show_boxes(image, boxes, border_size, color):
-    image = image[0]
-    image = np.transpose(image, (1, 2, 0))
+    try:
+        image = image[0]
+        image = np.transpose(image, (1, 2, 0))
     
-    im = Image.fromarray((image).astype(np.uint8))
-    width, height = im.size
-    im.show()
+        im = Image.fromarray((image).astype(np.uint8))
+        width, height = im.size
+        im.show()
     
-    dr = ImageDraw.Draw(im)
-    boxes = (boxes * width).astype(int)
-    for box in boxes:
-        x0 = box[0]
-        y0 = box[1]
-        x1 = x0 + box[2]
-        y1 = y0 + box[3]
+        dr = ImageDraw.Draw(im)
+        boxes = np.copy(boxes)
+        boxes = (boxes * width).astype(int)
+        for box in boxes:
+            x0 = box[0]
+            y0 = box[1]
+            x1 = box[2]
+            y1 = box[3]
 
-        for j in range(border_size):
-            final_coords = [x0+j, y0+j, x1-j, y1-j]
-            dr.rectangle(final_coords, outline = color)
-    im.show()
+            for j in range(border_size):
+                final_coords = [x0+j, y0+j, x1-j, y1-j]
+                dr.rectangle(final_coords, outline = color)
+        im.show()
+    except Exception:
+        print("no boxes")
 
-def from_xywh_to_xyxy(boxes0, boxes1):
-    xmin0 = boxes0[:, 0:1]
-    ymin0 = boxes0[:, 1:2]
-    xmax0 = xmin0 + boxes0[:, 2:3]
-    ymax0 = ymin0 + boxes0[:, 3:4]
+def draw_big(image, boxes, border_size, color):
+    try:
+        image = image[0]
+        image = np.transpose(image, (1, 2, 0))
+    
+        im = Image.fromarray((image).astype(np.uint8))
+        width = 600
+        im = im.resize((width,width))
+        im.show()
+    
+        dr = ImageDraw.Draw(im)
+        boxes = (boxes * width).astype(int)
+        for box in boxes:
+            x0 = box[0]
+            y0 = box[1]
+            x1 = box[2]
+            y1 = box[3]
 
-    xmin1 = boxes1[:, 0:1]
-    ymin1 = boxes1[:, 1:2]
-    xmax1 = xmin1 + boxes1[:, 2:3]
-    ymax1 = ymin1 + boxes1[:, 3:4]
-    return torch.cat((xmin0, ymin0, xmax0, ymax0), dim=1), torch.cat((xmin1, ymin1, xmax1, ymax1), dim=1)
+            for j in range(border_size):
+                final_coords = [x0+j, y0+j, x1-j, y1-j]
+                dr.rectangle(final_coords, outline = color)
+        im.show()
+    except Exception:
+        print("no boxes")
+
+def process_boxes(boxes, classes):
+    #batch_boxes,      size [batch_size,       S*S*A,  4]
+    #batch_classes,    size [batch_size,       S*S*A,  K+1]
+    #boxes = boxes[0, :, :]
+    classes = classes[0, :, :]
+    
+    mask = classes > 0.5
+    idx = mask[:, 1].nonzero().squeeze()
+    print("idx", idx)
+    print("classes", classes)
+    try:
+        selected_boxes = boxes.index_select(0, idx)
+        selected_classes = classes.index_select(0, idx)
+        print("SELECTED BOXES", selected_boxes)
+        print("SELECTED CLASSES", selected_classes)
+        return selected_boxes, selected_classes
+    except Exception:
+        print("EXCEPTION")
+        return Variable(torch.tensor()).cuda(), Variable(torch.tensor()).cuda()
+    
+def from_xywh_to_xyxy(boxes):
+    xmin = boxes[:, 0:1]
+    ymin = boxes[:, 1:2]
+    xmax = xmin + boxes[:, 2:3]
+    ymax = ymin + boxes[:, 3:4]
+    return torch.cat((xmin, ymin, xmax, ymax), dim=1)
 
 
 # def box_set_iou(boxes0, boxes1):

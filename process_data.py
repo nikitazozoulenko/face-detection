@@ -1,23 +1,21 @@
 import numpy as np
 from PIL import Image, ImageOps
 
-def get_paths():
-    MAX_NUM_OBJECTS = 1968
-    LIST_LENGTH = 12880
-    directory = "/hdd/Data/wider_face_split/wider_face_train_bbx_gt.txt"
-
+def read_WIDERFace(txt_dir = "/hdd/Data/wider_face_split/wider_face_train_bbx_gt.txt",
+                   img_dir = "/hdd/Data/WIDER_train/images/", LIST_LENGTH = 12880,
+                   MAX_NUM_OBJECTS = 1968):
+    
     images_filenames = []
     im_num_objects = []
     gt_unprocessed = np.zeros((LIST_LENGTH, MAX_NUM_OBJECTS, 4))
-
     image_count = -1
     i = 0
     read_num_obj = False
     next_num_objects = 0
-    with open(directory, "r") as f:
+    with open(txt_dir, "r") as f:
         for line in f:
             if ".jpg" in line:
-                images_filenames.append("/hdd/Data/WIDER_train/images/"+line.rstrip())
+                images_filenames.append(img_dir+line.rstrip())
                 read_num_obj = True
             elif read_num_obj == True:
                 next_num_objects = int(line.rstrip())
@@ -36,10 +34,19 @@ def get_paths():
                     i += 1
                     
     paths = [[images_filenames[i], gt_unprocessed[i], im_num_objects[i]] for i in range(len(images_filenames))]
-    np.random.shuffle(paths)
     return paths
 
-def fake_read_image_and_label(path):
+def get_paths_train():
+    return read_WIDERFace(txt_dir = "/hdd/Data/wider_face_split/wider_face_train_bbx_gt.txt",
+                          img_dir = "/hdd/Data/WIDER_train/images/", LIST_LENGTH = 12880,
+                          MAX_NUM_OBJECTS = 1968)
+
+def get_paths_val():
+    return read_WIDERFace(txt_dir = "/hdd/Data/wider_face_split/wider_face_val_bbx_gt.txt",
+                          img_dir = "/hdd/Data/WIDER_val/images/", LIST_LENGTH = 3226,
+                          MAX_NUM_OBJECTS = 1968)
+
+def fake_read_single_example(path):
     #path is (filename, gt)
     image_path, gt, num_objects = path
 
@@ -56,6 +63,7 @@ def fake_read_image_and_label(path):
     gt = fake_gt
     #random number for if to flip horizontally or not
     random = np.random.randint(0,2)
+    random = 1
 
     #read corresponding jpeg
     image = Image.open("/hdd/Data/WIDER_train/images/44--Aerobics/44_Aerobics_Aerobics_44_803.jpg")
@@ -68,12 +76,12 @@ def fake_read_image_and_label(path):
     image_array = np.asarray(image)
     gt = gt.astype(np.float32)
     
-    return image_array, gt, 7
+    return (image_array, gt, 7)
 
-def read_image_and_label(path):
+def read_single_example(path):
     #path is (filename, gt)
     image_path, gt, num_objects = path
-
+    gt = np.copy(gt)
     #random number for if to flip horizontally or not
     random = np.random.randint(0,2)
 
@@ -93,11 +101,16 @@ def read_image_and_label(path):
     image_array = np.asarray(image)
     gt = gt.astype(np.float32)
     
-    return image_array, gt, num_objects
+    return [image_array, gt, num_objects]
 
-def make_batch_from_list(images, gt, num_objects):
+    
+def make_batch_from_list(cumulative_batch):
+    images = [x[0] for x in cumulative_batch]
+    gt = [x[1] for x in cumulative_batch]
+    num_objects = [x[2] for x in cumulative_batch]
     width = 320
     random = np.random.randint(0,10)
+    random = 6
     resize_size = (width + 32*random, width + 32*random)
     resized_images = [np.asarray(Image.fromarray(image).resize(resize_size)) for image in images]
     
@@ -105,6 +118,3 @@ def make_batch_from_list(images, gt, num_objects):
     gt = np.array(gt)[:, 0:max_batch_objects, :]
     
     return np.array(resized_images).astype(np.float32), gt, np.array(num_objects)
-    
-    
-
