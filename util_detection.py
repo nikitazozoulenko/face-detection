@@ -4,13 +4,16 @@ from PIL import Image, ImageDraw
 import torch
 from torch.autograd import Variable
 
-def draw_and_show_boxes(image, boxes, border_size, color):
+def draw_and_show_boxes(cuda_image, cuda_boxes, border_size, color):
     try:
-        image = image[0]
+        image = cuda_image[0].data.cpu().numpy()
+        boxes = cuda_boxes.data.cpu().numpy()
         image = np.transpose(image, (1, 2, 0))
     
         im = Image.fromarray((image).astype(np.uint8))
         width, height = im.size
+        width = 600
+        im = im.resize((width, width))
         im.show()
     
         dr = ImageDraw.Draw(im)
@@ -29,35 +32,10 @@ def draw_and_show_boxes(image, boxes, border_size, color):
     except Exception:
         print("no boxes")
 
-def draw_big(image, boxes, border_size, color):
-    try:
-        image = image[0]
-        image = np.transpose(image, (1, 2, 0))
-    
-        im = Image.fromarray((image).astype(np.uint8))
-        width = 600
-        im = im.resize((width,width))
-        im.show()
-    
-        dr = ImageDraw.Draw(im)
-        boxes = (boxes * width).astype(int)
-        for box in boxes:
-            x0 = box[0]
-            y0 = box[1]
-            x1 = box[2]
-            y1 = box[3]
-
-            for j in range(border_size):
-                final_coords = [x0+j, y0+j, x1-j, y1-j]
-                dr.rectangle(final_coords, outline = color)
-        im.show()
-    except Exception:
-        print("no boxes")
-
 def process_boxes(boxes, classes):
     #batch_boxes,      size [batch_size,       S*S*A,  4]
     #batch_classes,    size [batch_size,       S*S*A,  K+1]
-    #boxes = boxes[0, :, :]
+    boxes = boxes[0, :, :]
     classes = classes[0, :, :]
     
     mask = classes > 0.5
@@ -72,7 +50,8 @@ def process_boxes(boxes, classes):
         return selected_boxes, selected_classes
     except Exception:
         print("EXCEPTION")
-        return Variable(torch.tensor()).cuda(), Variable(torch.tensor()).cuda()
+        fake = Variable(torch.zeros(1)).cuda()
+        return fake, fake
     
 def from_xywh_to_xyxy(boxes):
     xmin = boxes[:, 0:1]

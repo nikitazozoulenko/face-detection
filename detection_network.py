@@ -12,7 +12,7 @@ class CreateAnchorsAndBoxes(nn.Module):
     def __init__(self):
         super(CreateAnchorsAndBoxes, self).__init__()
 
-    def forward(self, classes, anchors_hw):
+    def forward(self, offsets, classes, anchors_hw):
         #offsets shape [batch_size, 4A, S, S]
         #anchors shape [A, 2]
         #classes shape [batch_size, (K+1)A, S, S]
@@ -20,7 +20,7 @@ class CreateAnchorsAndBoxes(nn.Module):
         A, _ = list(anchors_hw.size())
 
         ##RESHAPE OFFSETS
-        #offsets = offsets.permute(0,2,3,1).contiguous().view(R, A*H*W, 4)
+        offsets = offsets.permute(0,2,3,1).contiguous().view(R, A*H*W, 4)
         
         #RESHAPE CLASSES
         classes = classes.permute(0,2,3,1).contiguous().view(R, A*H*W, -1)
@@ -38,9 +38,140 @@ class CreateAnchorsAndBoxes(nn.Module):
         anchors_max = anchors_max.view(-1,2)
 
         anchors = torch.cat((anchors_min, anchors_max), dim = 1)
+        boxes = offsets + anchors
 
-        return classes, anchors
+        return boxes, classes, anchors
 
+class RegressorHead(nn.Module):
+    def __init__(self):
+        super(RegressorHead, self).__init__()
+        self.A = 4
+
+        self.conv0 = nn.Conv2d(256, 256, kernel_size=3, stride=1, padding=1)
+        self.BN0 = nn.BatchNorm3d(256)
+        self.conv1 = nn.Conv2d(256, 256, kernel_size=3, stride=1, padding=1)
+        self.BN1 = nn.BatchNorm3d(256)
+        self.regressor = nn.Conv2d(256, self.A*4, kernel_size=3, stride=1, padding=1)
+
+    def forward(self, x):
+        #x shape [batch_size, 256, H, W]
+        x = self.conv0(x)
+        x = self.BN0(x)
+        x = self.conv1(x)
+        x = self.BN1(x)
+        x = self.regressor(x)
+        return x
+
+class ClassificationHead(nn.Module):
+    def __init__(self):
+        super(ClassificationHead, self).__init__()
+        self.K = 1
+        self.A = 4
+
+        self.conv0 = nn.Conv2d(256, 256, kernel_size=3, stride=1, padding=1)
+        self.BN0 = nn.BatchNorm3d(256)
+        self.conv1 = nn.Conv2d(256, 256, kernel_size=3, stride=1, padding=1)
+        self.BN1 = nn.BatchNorm3d(256)
+        self.classifier = nn.Conv2d(256, self.A * (self.K+1), kernel_size=3, stride=1, padding=1)
+
+    def forward(self, x):
+        #x shape [batch_size, 256, H, W]
+        x = self.conv0(x)
+        x = self.BN0(x)
+        x = self.conv1(x)
+        x = self.BN1(x)
+        x = self.classifier(x)
+        return x
+    
+class FaceNet(nn.Module):
+    def __init__(self):
+        super(FaceNet, self).__init__()
+        resnet = models.resnet50(pretrained=True)
+        modules_up_to_conv3 = list(resnet.children())[:6] # delete the last layers.
+        modules_conv4 = list(resnet.children())[6]
+        modules_conv5 = list(resnet.children())[7]
+        
+        self.BN = nn.BatchNorm3d(3)
+        self.up_to_conv3 = nn.Sequential(*modules_up_to_conv3)
+        self.bottleneck_conv3 = nn.Conv2d(512, 256, kernel_size=1, stride=1, padding=0)
+        
+        self.conv4 = nn.Sequential(*modules_conv4)
+        self.bottleneck_conv4 = nn.Conv2d(1024, 256, kernel_size=1, stride=1, padding=0)
+
+        self.conv5 = nn.Sequential(*modules_conv5)
+        self.bottleneck_conv5 = nn.Conv2d(2048, 256, kernel_size=1, stride=1, padding=0)
+
+        self.conv6 = nn.Conv2d(2048, 1024, kernel_size=3, stride=2, padding=1)
+        self.bottleneck_conv6 = nn.Conv2d(1024, 256, kernel_size=1, stride=1, padding=0)
+
+        self.upsample = nn.Upsample(scale_factor=2, mode = "bilinear")
+
+        self.regressor_head =  RegressorHead()
+        self.classification_head = ClassificationHead()
+        
+        self.softmax = nn.Softmax(dim=2)
+        
+        self.anchors_hw3 = Variable(torch.Tensor([[0.0375,0.0375], [0.0375*0.618, 0.0375],
+                                                    [0.0250,0.0250], [0.0250*0.618, 0.0250]]), requires_grad=False).cuda()
+        self.anchors_hw4 = Variable(torch.Tensor([[0.0750,0.0750], [0.0750*0.618, 0.0750],
+                                                    [0.0530,0.0530], [0.0530*0.618, 0.0530]]), requires_grad=False).cuda()
+        self.anchors_hw5 = Variable(torch.Tensor([[0.1500,0.1500], [0.1500*0.618, 0.1500],
+                                                    [0.1060,0.1060], [0.1060*0.618, 0.1060]]), requires_grad=False).cuda()
+        self.anchors_hw6 = Variable(torch.Tensor([[0.3000,0.3000], [0.3000*0.618, 0.3000],
+                                                    [0.2120,0.1900], [0.2120*0.618, 0.1900]]), requires_grad=False).cuda()
+
+        self.create_anchors_and_boxes = CreateAnchorsAndBoxes()
+        
+    def forward(self, x, phase = "train"):
+        x = self.BN(x)
+        conv3 = self.up_to_conv3(x)
+        bottleneck_conv3 = self.bottleneck_conv3(conv3)
+        conv4 = self.conv4(conv3)
+        bottleneck_conv4 = self.bottleneck_conv4(conv4)
+        conv5 = self.conv5(conv4)
+        bottleneck_conv5 = self.bottleneck_conv5(conv5)
+        conv6 = self.conv6(conv5)
+        bottleneck_conv6 = self.bottleneck_conv6(conv6)
+
+        # FPN Feature pyramid structure described in paper
+        # "Feature Pyramid Networks for Object Detection"
+        out6 = bottleneck_conv6
+        out5 = bottleneck_conv5 + self.upsample(out6)
+        out4 = bottleneck_conv4 + self.upsample(out5)
+        out3 = bottleneck_conv3 + self.upsample(out4)
+
+        offsets6 = self.regressor_head(out6)
+        classes6 = self.classification_head(out6)
+        offsets6, classes6, anchors6 = self.create_anchors_and_boxes(offsets6, classes6, self.anchors_hw6)
+
+        offsets5 = self.regressor_head(out5)
+        classes5 = self.classification_head(out5)
+        offsets5, classes5, anchors5 = self.create_anchors_and_boxes(offsets5, classes5, self.anchors_hw5)
+
+        offsets4 = self.regressor_head(out4)
+        classes4 = self.classification_head(out4)
+        offsets4, classes4, anchors4 = self.create_anchors_and_boxes(offsets4, classes4, self.anchors_hw4)
+
+        offsets3 = self.regressor_head(out3)
+        classes3 = self.classification_head(out3)
+        offsets3, classes3, anchors3 = self.create_anchors_and_boxes(offsets3, classes3, self.anchors_hw3)
+
+        #concat all the predictions
+        offsets = torch.cat((offsets3, offsets4, offsets5, offsets6), dim=1)
+        classes = torch.cat((classes3, classes4, classes5, classes6), dim=1)
+        anchors = torch.cat((anchors3, anchors4, anchors5, anchors6), dim=0)
+
+        #apply softmax
+        classes = self.softmax(classes)
+
+        if phase == "train":
+            return offsets, classes, anchors
+        if phase == "test":
+            selected_boxes, selected_classes =  process_boxes(offsets, classes)
+            return selected_boxes, selected_classes
+        
+        return offsets, classes, anchors
+        
 class DetectionNetwork(nn.Module):
     def __init__(self):
         super(DetectionNetwork, self).__init__()
@@ -60,18 +191,20 @@ class DetectionNetwork(nn.Module):
                                                  [0.05,0.05], [0.025,0.05],
                                                  [0.025,0.025]]), requires_grad=False).cuda()
         self.create_anchors_and_boxes = CreateAnchorsAndBoxes()
+        
     def forward(self, x, phase = "train"):
         x = self.BN1(x)
         x = self.resnet_features(x)
         x = self.BNFeatures(x)
         classes = self.classification_head(x)
-        classes, anchors = self.create_anchors_and_boxes(classes, self.anchors_hw)
+        offsets = self.regressor_head(x)
+        boxes, classes, anchors = self.create_anchors_and_boxes(offsets, classes, self.anchors_hw)
         classes = self.softmax(classes)
         if phase == "train":
-            return classes, anchors
+            return boxes, classes, anchors
         if phase == "test":
-            selected_boxes, selected_classes =  process_boxes(anchors, classes)
-            return selected_classes, selected_boxes
+            selected_boxes, selected_classes =  process_boxes(boxes, classes)
+            return selected_boxes, selected_classes
 
 class ClassLoss(nn.Module):
     def __init__(self):
@@ -93,14 +226,14 @@ class ClassLoss(nn.Module):
 
         #focal loss described in paper "Focal Loss for Dense Object Detection"
         focal_loss = -(1-probs).pow(gamma) * probs.log()
-        extra = focal_loss.index_select(0, positive_idx)
+        #extra = focal_loss.index_select(0, positive_idx)
         
-        return torch.sum(focal_loss) + 10*torch.sum(extra)
+        return torch.sum(focal_loss) #+ 10*torch.sum(extra)
 
 class CoordLoss(nn.Module):
     def __init__(self):
         super(CoordLoss, self).__init__()
-        self.l1_loss = nn.L1Loss(size_average=False)
+        self.l1_loss = nn.L1Loss(size_average=True)
 
     def forward(self, boxes, gt, positive_idx):
         #boxes,       size [S*S*A,       4]
@@ -127,7 +260,6 @@ def match(threshhold, anchors, gt):
     arange = torch.stack((best_gt_idx, arange), dim=1)
 
     positive_mask = ious > threshhold
-    print("mask ious", ious[ious>threshhold])
 
     for i in range(num_objects):
         # # There is a gather function388 for that.
@@ -148,25 +280,34 @@ class Loss(nn.Module):
         self.class_loss = ClassLoss()
         self.coord_loss = CoordLoss()
 
-    def forward(self, threshhold, batch_classes, anchors, batch_gt, batch_num_objects):
+    def forward(self, batch_boxes, batch_classes, anchors, batch_gt, batch_num_objects):
         #batch_boxes,      size [batch_size,       S*S*A,  4]
         #batch_classes,    size [batch_size,       S*S*A,  K+1]
         #batch_gt,         size [batch_size, max_num_obj,  4]
         #batch_num_objects size [batch_size, max_num_obj]
+        threshhold = 0.5
         ALPHA_CLASS = 0.01
         ALPHA_COORD = 1
         R = batch_classes.size(0)
         class_loss = Variable(torch.zeros(1)).cuda()
         coord_loss = Variable(torch.zeros(1)).cuda()
         
-        for classes, gt, num_objects in zip(batch_classes, batch_gt, batch_num_objects):
+        for boxes, classes, gt, num_objects in zip(batch_boxes, batch_classes, batch_gt, batch_num_objects):
             gt = gt[:num_objects]
             positive_idx = match(threshhold, anchors, gt)
             class_loss += self.class_loss(classes, positive_idx)
-            #coord_loss += self.coord_loss(boxes, gt, positive_idx)
-            print("GT", gt)
+            coord_loss += self.coord_loss(boxes, gt, positive_idx)
 
         class_loss = class_loss * ALPHA_CLASS / R
         coord_loss = coord_loss * ALPHA_COORD / R
         total_loss = class_loss + coord_loss
         return total_loss, class_loss, coord_loss
+
+
+# resnet = models.resnet50(pretrained=True)
+# modules = list(resnet.children())[:8] # delete the last layers.
+
+# for i in range(len(modules)):
+#     print(i, modules)
+#     print()
+#     print()
