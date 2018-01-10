@@ -13,13 +13,14 @@ from detection_network import *
 from data_feeder import DataFeeder
 from util_detection import *
 from process_data import *
+from loss import *
 
 model = FaceNet().cuda()
 loss = Loss().cuda()
 
 train_data_feeder = DataFeeder(get_paths_train, read_single_example, make_batch_from_list,
                                preprocess_workers = 8, cuda_workers = 1,
-                               numpy_size = 20, cuda_size = 2, batch_size = 2)
+                               numpy_size = 20, cuda_size = 2, batch_size = 8)
 val_data_feeder = DataFeeder(get_paths_val, read_single_example, make_batch_from_list,
                                preprocess_workers = 4, cuda_workers = 1,
                                numpy_size = 10, cuda_size = 1, batch_size = 2)
@@ -27,7 +28,7 @@ val_data_feeder = DataFeeder(get_paths_val, read_single_example, make_batch_from
 train_data_feeder.start_queue_threads()
 val_data_feeder.start_queue_threads()
 
-learning_rate = 0.00000001
+learning_rate = 0.00001
 
 optimizer = optim.SGD(model.parameters(), lr=learning_rate, momentum=0.9)
 
