@@ -28,7 +28,7 @@ class ClassLoss(nn.Module):
         indices = Variable(gather_pos)
 
         gamma = Variable(torch.cuda.FloatTensor([2]))
-        weight = Variable(torch.cuda.FloatTensor([1,5]))
+        weight = Variable(torch.cuda.FloatTensor([1,15]))
         loss = FocalLoss.apply(classes, indices, gamma, weight)
         return loss
 
@@ -88,7 +88,7 @@ class Loss(nn.Module):
         #batch_gt,         size [batch_size, max_num_obj,  4]
         #batch_num_objects size [batch_size, max_num_obj]
         threshhold = 0.5
-        ALPHA_CLASS = 1
+        ALPHA_CLASS = 10
         ALPHA_COORD = 1
         R = batch_classes.size(0)
         class_loss = Variable(torch.zeros(1)).cuda()
@@ -138,6 +138,7 @@ class FocalLoss(autograd.Function):
     @staticmethod
     def backward(ctx, grad_output):
         classes, indices, gamma, weight = ctx.saved_variables
+        eps = 0.000001
 
         #get one_hot representation of indices
         one_hot = torch.cuda.ByteTensor(classes.size()).zero_()
@@ -147,7 +148,7 @@ class FocalLoss(autograd.Function):
         #calc softmax and logsoftmax
         probs = F.softmax(classes, 1)
         probs_mask = probs[one_hot].unsqueeze(1)
-        logs_mask = probs_mask.log()
+        logs_mask = (probs_mask+eps).log()
 
         #get weights into the right shape
         weights = torch.index_select(weight, 0, indices).unsqueeze(1)

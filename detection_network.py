@@ -59,7 +59,7 @@ class RegressorHead(nn.Module):
         x = self.BN0(x)
         x = self.conv1(x)
         x = self.BN1(x)
-        x = self.regressor(x) / 10000
+        x = self.regressor(x)
         return x
 
 class ClassificationHead(nn.Module):
@@ -106,6 +106,11 @@ class FaceNet(nn.Module):
 
         self.upsample = nn.Upsample(scale_factor=2, mode = "bilinear")
 
+        self.out6BN = nn.BatchNorm3d(256)
+        self.out5BN = nn.BatchNorm3d(256)
+        self.out4BN = nn.BatchNorm3d(256)
+        self.out3BN = nn.BatchNorm3d(256)
+
         self.regressor_head =  RegressorHead()
         self.classification_head = ClassificationHead()
         
@@ -136,9 +141,16 @@ class FaceNet(nn.Module):
         # FPN Feature pyramid structure described in paper
         # "Feature Pyramid Networks for Object Detection"
         out6 = bottleneck_conv6
+        out6 = self.out6BN(out6)
+        
         out5 = bottleneck_conv5 + self.upsample(out6)
+        out5 = self.out5BN(out5)
+        
         out4 = bottleneck_conv4 + self.upsample(out5)
+        out4 = self.out4BN(out4)
+        
         out3 = bottleneck_conv3 + self.upsample(out4)
+        out3 = self.out3BN(out3)
 
         offsets6 = self.regressor_head(out6)
         classes6 = self.classification_head(out6)

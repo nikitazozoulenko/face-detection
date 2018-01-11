@@ -34,7 +34,7 @@ def read_WIDERFace(txt_dir = "/hdd/Data/wider_face_split/wider_face_train_bbx_gt
                     i += 1
                     
     paths = [[images_filenames[i], gt_unprocessed[i], im_num_objects[i]] for i in range(len(images_filenames))]
-    return paths[0:2]
+    return paths
 
 def get_paths_train():
     return read_WIDERFace(txt_dir = "/hdd/Data/wider_face_split/wider_face_train_bbx_gt.txt",
@@ -108,7 +108,7 @@ def make_batch_from_list(cumulative_batch):
     gt = [x[1] for x in cumulative_batch]
     num_objects = [x[2] for x in cumulative_batch]
     width = 320
-    random = np.random.randint(0,6)
+    random = np.random.randint(0,5)
     resize_size = (width + 64*random, width + 64*random)
     resized_images = [np.asarray(Image.fromarray(image).resize(resize_size)) for image in images]
     
