@@ -101,13 +101,13 @@ for i in range(num_iterations):
         print(i)
     
     #decrease learning rate
-    if i == 100000
-        learning_rate /= (np.sqrt(10)**2)
+    if i == 100000:
+        learning_rate /= 10
         print("updated learning rate: current lr:", learning_rate)
         for param_group in optimizer.param_groups:
             param_group['lr'] = learning_rate
-    if i % 10000:
-        torch.save(model, "savedir/facenet"+i/1000"k.pt")
+    if i % 10000 == 0 and i != 0:
+        torch.save(model, "savedir/facenet"+str(i//1000)+"k.pt")
 _, batch = val_data_feeder.get_batch()
 images, gt, num_objects = batch
 boxes, classes = model(images, phase = "test")
