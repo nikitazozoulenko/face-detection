@@ -9,17 +9,11 @@ import torch.nn.functional as F
 import numpy as np
 
 from util_detection import *
-
-def from_xywh_to_xyxy(boxes):
-    xmin = boxes[:, 0:1]
-    ymin = boxes[:, 1:2]
-    xmax = xmin + boxes[:, 2:3]
-    ymax = ymin + boxes[:, 3:4]
-    return torch.cat((xmin, ymin, xmax, ymax), dim=1)
     
 class ClassLoss(nn.Module):
     def __init__(self):
         super(ClassLoss, self).__init__()
+        self.CE = nn.CrossEntropyLoss()
 
     def forward(self, classes, positive_idx):
         positive_idx = positive_idx[:,0]
@@ -28,8 +22,9 @@ class ClassLoss(nn.Module):
         indices = Variable(gather_pos)
 
         gamma = Variable(torch.cuda.FloatTensor([2]))
-        weight = Variable(torch.cuda.FloatTensor([1,15]))
+        weight = Variable(torch.cuda.FloatTensor([1,5]))
         loss = FocalLoss.apply(classes, indices, gamma, weight)
+        #loss = self.CE(classes, indices)
         return loss
 
 class CoordLoss(nn.Module):
@@ -46,14 +41,12 @@ class CoordLoss(nn.Module):
 
         selected_pred = boxes.index_select(0, pred_idx)
         selected_gt = gt.index_select(0, gt_idx)
-        selected_gt = from_xywh_to_xyxy(selected_gt)
 
         coord_loss = self.l1_loss(selected_pred, selected_gt)
         return coord_loss
 
 def match(threshhold, anchors, gt):
-    gt_boxes = from_xywh_to_xyxy(gt)
-    ious = jaccard(anchors, gt_boxes)
+    ious = jaccard(anchors, gt)
     best_gt_iou, best_gt_idx = ious.max(0)
     
     num_objects = best_gt_idx.size(0)
@@ -88,7 +81,7 @@ class Loss(nn.Module):
         #batch_gt,         size [batch_size, max_num_obj,  4]
         #batch_num_objects size [batch_size, max_num_obj]
         threshhold = 0.5
-        ALPHA_CLASS = 10
+        ALPHA_CLASS = 5
         ALPHA_COORD = 1
         R = batch_classes.size(0)
         class_loss = Variable(torch.zeros(1)).cuda()
@@ -138,7 +131,6 @@ class FocalLoss(autograd.Function):
     @staticmethod
     def backward(ctx, grad_output):
         classes, indices, gamma, weight = ctx.saved_variables
-        eps = 0.000001
 
         #get one_hot representation of indices
         one_hot = torch.cuda.ByteTensor(classes.size()).zero_()
@@ -148,7 +140,7 @@ class FocalLoss(autograd.Function):
         #calc softmax and logsoftmax
         probs = F.softmax(classes, 1)
         probs_mask = probs[one_hot].unsqueeze(1)
-        logs_mask = (probs_mask+eps).log()
+        logs_mask = (probs_mask).log()
 
         #get weights into the right shape
         weights = torch.index_select(weight, 0, indices).unsqueeze(1)

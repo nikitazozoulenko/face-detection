@@ -12,9 +12,7 @@ def draw_and_show_boxes(cuda_image, cuda_boxes, border_size, color):
     
         im = Image.fromarray((image).astype(np.uint8))
         width, height = im.size
-        width = 600
         im = im.resize((width, width))
-        im.show()
     
         dr = ImageDraw.Draw(im)
         boxes = np.copy(boxes)
@@ -29,8 +27,34 @@ def draw_and_show_boxes(cuda_image, cuda_boxes, border_size, color):
                 final_coords = [x0+j, y0+j, x1-j, y1-j]
                 dr.rectangle(final_coords, outline = color)
         im.show()
-    except Exception:
+    except Exception as e:
+        print(e)
         print("no boxes")
+
+def process_draw(threshhold, images, boxes, classes):
+    selected_boxes, selected_classes = process_boxes(threshhold, boxes, classes)
+    draw_and_show_boxes(images, selected_boxes, 2, "red")
+
+def process_boxes(threshhold, batch_boxes, batch_classes):
+    #batch_boxes,      size [batch_size,       S*S*A,  4]
+    #batch_classes,    size [batch_size,       S*S*A,  K+1]
+    boxes = batch_boxes[0, :, :]
+    classes = batch_classes[0, :, :]
+    
+    mask = classes > threshhold
+    idx = mask[:, 1].nonzero().squeeze()
+    #print("idx", idx)
+    #print("classes", classes)
+    try:
+        selected_boxes = boxes.index_select(0, idx)
+        selected_classes = classes.index_select(0, idx)
+        #print("SELECTED BOXES", selected_boxes)
+        #print("SELECTED CLASSES", selected_classes)
+        return selected_boxes, selected_classes
+    except Exception:
+        #print("EXCEPTION")
+        return None, None
+
 
 ###I CANT FIGURE OUT HOW TO FIX MY OWN IOU FUNCTION,
 ###IT IS CORRECT EXCEPT FOR SOME EXAMPLES WHICH IT GIVES IOU>1,
