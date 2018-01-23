@@ -21,8 +21,8 @@ class ClassLoss(nn.Module):
         gather_pos.index_fill_(0, positive_idx.data, 1)
         indices = Variable(gather_pos)
 
-        gamma = Variable(torch.cuda.FloatTensor([2]))
-        weight = Variable(torch.cuda.FloatTensor([1,5]))
+        gamma = Variable(torch.cuda.FloatTensor([3]))
+        weight = Variable(torch.cuda.FloatTensor([1,1]))
         loss = FocalLoss.apply(classes, indices, gamma, weight)
         #loss = self.CE(classes, indices)
         return loss
@@ -81,8 +81,8 @@ class Loss(nn.Module):
         #batch_gt,         size [batch_size, max_num_obj,  4]
         #batch_num_objects size [batch_size, max_num_obj]
         threshhold = 0.5
-        ALPHA_CLASS = 5
-        ALPHA_COORD = 1
+        ALPHA_CLASS = 1
+        ALPHA_COORD = 10
         R = batch_classes.size(0)
         class_loss = Variable(torch.zeros(1)).cuda()
         coord_loss = Variable(torch.zeros(1)).cuda()
@@ -91,7 +91,7 @@ class Loss(nn.Module):
             gt = gt[:num_objects]
             positive_idx = match(threshhold, anchors, gt)
             class_loss += self.class_loss(classes, positive_idx)
-            coord_loss += self.coord_loss(boxes, gt, positive_idx)
+            #coord_loss += self.coord_loss(boxes, gt, positive_idx)
 
         class_loss = class_loss * ALPHA_CLASS / R
         coord_loss = coord_loss * ALPHA_COORD / R

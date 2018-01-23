@@ -63,7 +63,7 @@ class RegressorHead(nn.Module):
         #x shape [batch_size, 256, H, W]
         x = self.conv0(x)
         x = self.BN0(x)
-        x = self.regressor(x)
+        x = self.regressor(x) / 1000000
         return x
 
 class ClassificationHead(nn.Module):
@@ -93,11 +93,15 @@ class ClassificationHead(nn.Module):
 class FaceNet(nn.Module):
     def __init__(self):
         super(FaceNet, self).__init__()
-        resnet = models.resnet101(pretrained=True)
-        modules_conv4 = list(resnet.children())[:7]
+        resnet = models.resnet50(pretrained=True)
+        modules_conv3 = list(resnet.children())[:6]
+        modules_conv4 = list(resnet.children())[6]
         modules_conv5 = list(resnet.children())[7]
         
         self.BN = nn.BatchNorm3d(3)
+
+        self.conv3 = nn.Sequential(*modules_conv3)
+        self.bottleneck_conv3 = nn.Conv2d(512, 256, kernel_size=1, stride=1, padding=0, bias = False)
         
         self.conv4 = nn.Sequential(*modules_conv4)
         self.bottleneck_conv4 = nn.Conv2d(1024, 256, kernel_size=1, stride=1, padding=0, bias = False)
@@ -113,27 +117,33 @@ class FaceNet(nn.Module):
         self.out6BN = nn.BatchNorm3d(256)
         self.out5BN = nn.BatchNorm3d(256)
         self.out4BN = nn.BatchNorm3d(256)
+        self.out3BN = nn.BatchNorm3d(256)
 
         self.regressor_head =  RegressorHead()
         self.classification_head = ClassificationHead()
         
         self.softmax = nn.Softmax(dim=2)
-
-        self.anchors_hw4 = Variable(torch.Tensor([[0.0222, 0.0222], [0.0222/2, 0.0222],
-                                                  [0.0319, 0.0319], [0.0319/2, 0.0319],
-                                                  [0.0457, 0.0457], [0.0457/2, 0.0457]]), requires_grad=False).cuda()
-        self.anchors_hw5 = Variable(torch.Tensor([[0.0657, 0.0657], [0.0657/2, 0.0657],
-                                                  [0.0942, 0.0942], [0.0942/2, 0.0942],
-                                                  [0.1353, 0.1353], [0.1353/2, 0.1353]]), requires_grad=False).cuda()
-        self.anchors_hw6 = Variable(torch.Tensor([[0.1941, 0.1941], [0.1941/2, 0.1941],
-                                                  [0.2787, 0.2787], [0.2787/2, 0.2787],
-                                                  [0.4000, 0.4000], [0.4000/2, 0.4000]]), requires_grad=False).cuda()
-
+        
+        f = (0.4/0.015)**(1/11)
+        self.anchors_hw3 = Variable(torch.Tensor([[0.015*(f**0),  0.015*(f**0) ],  [0.015*(f**0)/2,  0.015*(f**0) ],
+                                                  [0.015*(f**1),  0.015*(f**1) ],  [0.015*(f**1)/2,  0.015*(f**1) ],
+                                                  [0.015*(f**2),  0.015*(f**2) ],  [0.015*(f**2)/2,  0.015*(f**2) ]]),requires_grad=False).cuda()
+        self.anchors_hw4 = Variable(torch.Tensor([[0.015*(f**3),  0.015*(f**3) ],  [0.015*(f**3)/2,  0.015*(f**3) ],
+                                                  [0.015*(f**4),  0.015*(f**4) ],  [0.015*(f**4)/2,  0.015*(f**4) ],
+                                                  [0.015*(f**5),  0.015*(f**5) ],  [0.015*(f**5)/2,  0.015*(f**5) ]]),requires_grad=False).cuda()
+        self.anchors_hw5 = Variable(torch.Tensor([[0.015*(f**6),  0.015*(f**6) ],  [0.015*(f**6)/2,  0.015*(f**6) ],
+                                                  [0.015*(f**7),  0.015*(f**7) ],  [0.015*(f**7)/2,  0.015*(f**7) ],
+                                                  [0.015*(f**8),  0.015*(f**8) ],  [0.015*(f**8)/2,  0.015*(f**8) ]]),requires_grad=False).cuda()
+        self.anchors_hw6 = Variable(torch.Tensor([[0.015*(f**9),  0.015*(f**9) ],  [0.015*(f**9)/2,  0.015*(f**9) ],
+                                                  [0.015*(f**10), 0.015*(f**10) ], [0.015*(f**10)/2, 0.015*(f**10) ],
+                                                  [0.015*(f**11), 0.015*(f**11) ], [0.015*(f**11)/2, 0.015*(f**11) ]]),requires_grad=False).cuda()
         self.create_anchors_and_boxes = CreateAnchorsAndBoxes()
         
     def forward(self, x, phase = "train"):
         x = self.BN(x)
-        conv4 = self.conv4(x)
+        conv3 = self.conv3(x)
+        bottleneck_conv3 = self.bottleneck_conv3(conv3)
+        conv4 = self.conv4(conv3)
         bottleneck_conv4 = self.bottleneck_conv4(conv4)
         conv5 = self.conv5(conv4)
         bottleneck_conv5 = self.bottleneck_conv5(conv5)
@@ -151,6 +161,9 @@ class FaceNet(nn.Module):
         out4 = bottleneck_conv4 + self.upsample(out5)
         out4 = self.out4BN(out4)
 
+        out3 = bottleneck_conv3 + self.upsample(out4)
+        out3 = self.out3BN(out3)
+
         offsets6 = self.regressor_head(out6)
         classes6 = self.classification_head(out6)
         offsets6, classes6, anchors6 = self.create_anchors_and_boxes(offsets6, classes6, self.anchors_hw6)
@@ -163,10 +176,14 @@ class FaceNet(nn.Module):
         classes4 = self.classification_head(out4)
         offsets4, classes4, anchors4 = self.create_anchors_and_boxes(offsets4, classes4, self.anchors_hw4)
 
+        offsets3 = self.regressor_head(out3)
+        classes3 = self.classification_head(out3)
+        offsets3, classes3, anchors3 = self.create_anchors_and_boxes(offsets3, classes3, self.anchors_hw3)
+
         #concat all the predictions
-        offsets = torch.cat((offsets4, offsets5, offsets6), dim=1)
-        classes = torch.cat((classes4, classes5, classes6), dim=1)
-        anchors = torch.cat((anchors4, anchors5, anchors6), dim=0)
+        offsets = torch.cat((offsets3, offsets4, offsets5, offsets6), dim=1)
+        classes = torch.cat((classes3, classes4, classes5, classes6), dim=1)
+        anchors = torch.cat((anchors3, anchors4, anchors5, anchors6), dim=0)
 
         if phase == "train":
             return offsets, classes, anchors

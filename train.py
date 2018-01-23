@@ -64,7 +64,7 @@ val_data_feeder = DataFeeder(get_paths_val, read_single_example, make_batch_from
 train_data_feeder.start_queue_threads()
 val_data_feeder.start_queue_threads()
 
-learning_rate = 0.001
+learning_rate = 0.01
 optimizer = optim.SGD(model.parameters(), lr=learning_rate, momentum=0.9, weight_decay = 0.0001)
 
 def train_batch(data_feeder):
@@ -74,7 +74,7 @@ def train_batch(data_feeder):
     total_loss, class_loss, coord_loss = loss(offsets, classes, anchors, gt, num_objects)
     return total_loss, class_loss, coord_loss
     
-num_iterations = 200001
+num_iterations = 180001
 for i in range(num_iterations):
     #training loss
     optimizer.zero_grad()
@@ -101,13 +101,13 @@ for i in range(num_iterations):
         print(i)
     
     #decrease learning rate
-    if i == 100000:
+    if i == 60000:
         learning_rate /= 10
         print("updated learning rate: current lr:", learning_rate)
         for param_group in optimizer.param_groups:
             param_group['lr'] = learning_rate
     if i % 10000 == 0 and i != 0:
-        torch.save(model, "savedir/facenet"+str(i//1000)+"k.pt")
+        torch.save(model, "savedir/facenet_50againoldagain_"+str(i//1000)+"k.pt")
 _, batch = val_data_feeder.get_batch()
 images, gt, num_objects = batch
 boxes, classes = model(images, phase = "test")
@@ -120,9 +120,9 @@ process_draw(0.4, images, boxes, classes)
 process_draw(0.3, images, boxes, classes)
 process_draw(0.2, images, boxes, classes)
 process_draw(0.1, images, boxes, classes)
+process_draw(0,   images, boxes, classes)
 
 graph()
-
     
 train_data_feeder.kill_queue_threads()
 val_data_feeder.start_queue_threads()
