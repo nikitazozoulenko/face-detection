@@ -30,18 +30,11 @@ class CreateAnchorsAndBoxes(nn.Module):
         x_coords = ((torch.arange(H).cuda()+0.5)/H).expand(W, H)
         y_coords = ((torch.arange(W).cuda()+0.5)/W).expand(H, W).t()
         coord_grid = Variable(torch.stack((x_coords, y_coords), dim = 0))
-        #print("coord_grid", coord_grid)
         coords = coord_grid.view(2,-1).t().expand(A, -1, -1)
-        #print("coords",coords)
         anch = anchors_hw.unsqueeze(1).expand(-1,H*W,-1)
-        #print("anch", anch)
-        #coords = coord_grid.view(-1, 2).expand(A,-1,-1).permute(1,0,2)
 
         anchors_min = coords - anch/2
         anchors_max = anchors_min + anch
-
-        #print("anchors_min",anchors_min)
-
         anchors_min = anchors_min.view(-1,2)
         anchors_max = anchors_max.view(-1,2)
 
@@ -166,28 +159,28 @@ class FaceNet(nn.Module):
 
         offsets6 = self.regressor_head(out6)
         classes6 = self.classification_head(out6)
-        offsets6, classes6, anchors6 = self.create_anchors_and_boxes(offsets6, classes6, self.anchors_hw6)
+        boxes6, classes6, anchors6 = self.create_anchors_and_boxes(offsets6, classes6, self.anchors_hw6)
 
         offsets5 = self.regressor_head(out5)
         classes5 = self.classification_head(out5)
-        offsets5, classes5, anchors5 = self.create_anchors_and_boxes(offsets5, classes5, self.anchors_hw5)
+        boxes5, classes5, anchors5 = self.create_anchors_and_boxes(offsets5, classes5, self.anchors_hw5)
 
         offsets4 = self.regressor_head(out4)
         classes4 = self.classification_head(out4)
-        offsets4, classes4, anchors4 = self.create_anchors_and_boxes(offsets4, classes4, self.anchors_hw4)
+        boxes4, classes4, anchors4 = self.create_anchors_and_boxes(offsets4, classes4, self.anchors_hw4)
 
         offsets3 = self.regressor_head(out3)
         classes3 = self.classification_head(out3)
-        offsets3, classes3, anchors3 = self.create_anchors_and_boxes(offsets3, classes3, self.anchors_hw3)
+        boxes3, classes3, anchors3 = self.create_anchors_and_boxes(offsets3, classes3, self.anchors_hw3)
 
         #concat all the predictions
-        offsets = torch.cat((offsets3, offsets4, offsets5, offsets6), dim=1)
+        boxes = torch.cat((boxes3, boxes4, boxes5, boxes6), dim=1)
         classes = torch.cat((classes3, classes4, classes5, classes6), dim=1)
         anchors = torch.cat((anchors3, anchors4, anchors5, anchors6), dim=0)
 
         if phase == "train":
-            return offsets, classes, anchors
+            return boxes, classes, anchors
         if phase == "test":
             classes = self.softmax(classes)
-            return offsets, classes
+            return boxes, classes
 

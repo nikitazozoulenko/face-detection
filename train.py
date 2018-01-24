@@ -57,7 +57,7 @@ loss = Loss().cuda()
 
 train_data_feeder = DataFeeder(get_paths_train, read_single_example, make_batch_from_list,
                                preprocess_workers = 8, cuda_workers = 4,
-                               numpy_size = 20, cuda_size = 2, batch_size = 4)
+                               numpy_size = 20, cuda_size = 2, batch_size = 3)
 val_data_feeder = DataFeeder(get_paths_val, read_single_example, make_batch_from_list,
                                preprocess_workers = 4, cuda_workers = 1,
                                numpy_size = 6, cuda_size = 1, batch_size = 2)

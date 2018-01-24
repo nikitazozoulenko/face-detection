@@ -112,7 +112,7 @@ def make_batch_from_list(cumulative_batch):
     gt = [x[1] for x in cumulative_batch]
     num_objects = [x[2] for x in cumulative_batch]
     width = 512
-    random = np.random.randint(0,4)
+    random = np.random.randint(0,3)
     resize_size = (width + 64*random, width + 64*random)
     resized_images = [np.asarray(Image.fromarray(image).resize(resize_size)) for image in images]
     
