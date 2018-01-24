@@ -25,11 +25,11 @@ train_data_feeder.start_queue_threads()
 val_data_feeder.start_queue_threads()
 
 #model = torch.load("savedir/facenet0o001.pt")
-model = torch.load("savedir/facenet_50again_5k.pt")
+model = torch.load("savedir/facenet_newiou_20k.pt")
 model.eval()
 
-#model2 = torch.load("savedir/facenet_newloss_120k.pt")
-#model2.eval()
+model2 = torch.load("savedir/facenet_newiou_130k.pt")
+model2.eval()
 
 def test_model(images, model):
     boxes, classes = model(images, phase = "test")
@@ -47,11 +47,11 @@ def test_model(images, model):
 num_iterations = 1
 for i in range(num_iterations):
     print(i)
-    _, batch = train_data_feeder.get_batch()
+    _, batch = val_data_feeder.get_batch()
     images, gt, num_objects = batch
     test_model(images, model)
-    #test_model(images, model)
-    #test_model(images, model2)
+    test_model(images, model)
+    test_model(images, model2)
 
     
 train_data_feeder.kill_queue_threads()

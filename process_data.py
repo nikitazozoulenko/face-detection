@@ -34,7 +34,7 @@ def read_WIDERFace(txt_dir = "/hdd/Data/wider_face_split/wider_face_train_bbx_gt
                     i += 1
                     
     paths = [[images_filenames[i], gt_unprocessed[i], im_num_objects[i]] for i in range(len(images_filenames))]
-    return paths[:100]
+    return paths
 
 def get_paths_train():
     return read_WIDERFace(txt_dir = "/hdd/Data/wider_face_split/wider_face_train_bbx_gt.txt",
@@ -44,7 +44,7 @@ def get_paths_train():
 def get_paths_val():
     return read_WIDERFace(txt_dir = "/hdd/Data/wider_face_split/wider_face_val_bbx_gt.txt",
                           img_dir = "/hdd/Data/WIDER_val/images/", LIST_LENGTH = 3226,
-                          MAX_NUM_OBJECTS = 1968)
+                          MAX_NUM_OBJECTS = 709)
 
 def fake_read_single_example(path):
     fake = np.array([[ 0.78125,     0.22894168,  0.04589844,  0.06695464],

@@ -15,14 +15,31 @@ class ClassLoss(nn.Module):
         super(ClassLoss, self).__init__()
         self.CE = nn.CrossEntropyLoss()
 
-    def forward(self, classes, positive_idx):
+    def forward(self, classes, positive_idx, negative_idx):
+        
+        final_mask = torch.ones(classes.size(0)).cuda().byte()
+        try:
+            for i in negative_idx[:, 0].data:
+                final_mask[i] = 0
+        except:
+            print("no iou between the regions 0.30 0.45")
+            print("the idxs were:", negative_idx)
+            print("continue training")
+
         positive_idx = positive_idx[:,0]
         gather_pos = torch.zeros(classes.size(0), out=torch.LongTensor()).cuda()
         gather_pos.index_fill_(0, positive_idx.data, 1)
         indices = Variable(gather_pos)
 
-        gamma = Variable(torch.cuda.FloatTensor([3]))
-        weight = Variable(torch.cuda.FloatTensor([1,1]))
+
+        
+        indices = indices[final_mask]
+        classes = classes[final_mask.unsqueeze(1)].view(-1, 2)
+
+
+        
+        gamma = Variable(torch.cuda.FloatTensor([2]))
+        weight = Variable(torch.cuda.FloatTensor([1,3]))
         loss = FocalLoss.apply(classes, indices, gamma, weight)
         #loss = self.CE(classes, indices)
         return loss
@@ -54,7 +71,12 @@ def match(threshhold, anchors, gt):
     arange = Variable(arange).cuda()
     arange = torch.stack((best_gt_idx, arange), dim=1)
 
-    positive_mask = ious > threshhold
+    positive_mask = ious >= threshhold
+    neg_threshhold = 0.30
+    negative_mask = ious < threshhold
+    sec_mask = ious > neg_threshhold
+
+    mask = negative_mask * sec_mask
 
     for i in range(num_objects):
         # # There is a gather function388 for that.
@@ -65,9 +87,11 @@ def match(threshhold, anchors, gt):
         box_idx = arange[i, 0]
         arange_idx = arange[i, 1]
         positive_mask[box_idx, arange_idx] = 1
+        mask[box_idx, arange_idx] = 0
 
     positive_idx = torch.nonzero(positive_mask)
-    return positive_idx
+    non_idx = torch.nonzero(mask)
+    return positive_idx, non_idx
     
 class Loss(nn.Module):
     def __init__(self):
@@ -80,18 +104,18 @@ class Loss(nn.Module):
         #batch_classes,    size [batch_size,       S*S*A,  K+1]
         #batch_gt,         size [batch_size, max_num_obj,  4]
         #batch_num_objects size [batch_size, max_num_obj]
-        threshhold = 0.5
+        threshhold = 0.45
         ALPHA_CLASS = 1
-        ALPHA_COORD = 10
+        ALPHA_COORD = 1/3
         R = batch_classes.size(0)
         class_loss = Variable(torch.zeros(1)).cuda()
         coord_loss = Variable(torch.zeros(1)).cuda()
         
         for boxes, classes, gt, num_objects in zip(batch_boxes, batch_classes, batch_gt, batch_num_objects):
             gt = gt[:num_objects]
-            positive_idx = match(threshhold, anchors, gt)
-            class_loss += self.class_loss(classes, positive_idx)
-            #coord_loss += self.coord_loss(boxes, gt, positive_idx)
+            positive_idx, negative_idx = match(threshhold, anchors, gt)
+            class_loss += self.class_loss(classes, positive_idx, negative_idx)
+            coord_loss += self.coord_loss(boxes, gt, positive_idx)
 
         class_loss = class_loss * ALPHA_CLASS / R
         coord_loss = coord_loss * ALPHA_COORD / R

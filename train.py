@@ -56,7 +56,7 @@ model = FaceNet().cuda()
 loss = Loss().cuda()
 
 train_data_feeder = DataFeeder(get_paths_train, read_single_example, make_batch_from_list,
-                               preprocess_workers = 8, cuda_workers = 1,
+                               preprocess_workers = 8, cuda_workers = 4,
                                numpy_size = 20, cuda_size = 2, batch_size = 4)
 val_data_feeder = DataFeeder(get_paths_val, read_single_example, make_batch_from_list,
                                preprocess_workers = 4, cuda_workers = 1,
@@ -74,7 +74,7 @@ def train_batch(data_feeder):
     total_loss, class_loss, coord_loss = loss(offsets, classes, anchors, gt, num_objects)
     return total_loss, class_loss, coord_loss
     
-num_iterations = 180001
+num_iterations = 10001
 for i in range(num_iterations):
     #training loss
     optimizer.zero_grad()
@@ -101,13 +101,13 @@ for i in range(num_iterations):
         print(i)
     
     #decrease learning rate
-    if i == 60000:
+    if i == 60000000:
         learning_rate /= 10
         print("updated learning rate: current lr:", learning_rate)
         for param_group in optimizer.param_groups:
             param_group['lr'] = learning_rate
     if i % 10000 == 0 and i != 0:
-        torch.save(model, "savedir/facenet_50againoldagain_"+str(i//1000)+"k.pt")
+        torch.save(model, "savedir/facenet_"+str(i//1000)+"k.pt")
 _, batch = val_data_feeder.get_batch()
 images, gt, num_objects = batch
 boxes, classes = model(images, phase = "test")

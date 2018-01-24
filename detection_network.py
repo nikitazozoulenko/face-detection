@@ -63,7 +63,7 @@ class RegressorHead(nn.Module):
         #x shape [batch_size, 256, H, W]
         x = self.conv0(x)
         x = self.BN0(x)
-        x = self.regressor(x) / 1000000
+        x = self.regressor(x)
         return x
 
 class ClassificationHead(nn.Module):
