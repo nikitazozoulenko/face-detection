@@ -13,7 +13,7 @@ class CreateAnchorsAndBoxes(nn.Module):
     def __init__(self):
         super(CreateAnchorsAndBoxes, self).__init__()
 
-    def forward(self, offsets, classes, anchors_hw):
+    def forward(self, offsets, classes, anchors_hw, height, width):
         #offsets shape [batch_size, 4A, S, S]
         #anchors shape [A, 2]
         #classes shape [batch_size, (K+1)A, S, S]
@@ -27,8 +27,8 @@ class CreateAnchorsAndBoxes(nn.Module):
         classes = classes.view(R,-1, A*H*W).permute(0,2,1)
         
         #EXPAND CENTER COORDS
-        x_coords = ((torch.arange(H).cuda()+0.5)/H).expand(W, H)
-        y_coords = ((torch.arange(W).cuda()+0.5)/W).expand(H, W).t()
+        x_coords = ((torch.arange(H).cuda()/H*height+0.5)).expand(W, H)
+        y_coords = ((torch.arange(W).cuda()/W*width+0.5)).expand(H, W).t()
         coord_grid = Variable(torch.stack((x_coords, y_coords), dim = 0))
         coords = coord_grid.view(2,-1).t().expand(A, -1, -1)
         anch = anchors_hw.unsqueeze(1).expand(-1,H*W,-1)
@@ -116,23 +116,24 @@ class FaceNet(nn.Module):
         self.classification_head = ClassificationHead()
         
         self.softmax = nn.Softmax(dim=2)
-        
-        f = (0.4/0.015)**(1/11)
-        self.anchors_hw3 = Variable(torch.Tensor([[0.015*(f**0),  0.015*(f**0) ],  [0.015*(f**0)/2,  0.015*(f**0) ],
-                                                  [0.015*(f**1),  0.015*(f**1) ],  [0.015*(f**1)/2,  0.015*(f**1) ],
-                                                  [0.015*(f**2),  0.015*(f**2) ],  [0.015*(f**2)/2,  0.015*(f**2) ]]),requires_grad=False).cuda()
-        self.anchors_hw4 = Variable(torch.Tensor([[0.015*(f**3),  0.015*(f**3) ],  [0.015*(f**3)/2,  0.015*(f**3) ],
-                                                  [0.015*(f**4),  0.015*(f**4) ],  [0.015*(f**4)/2,  0.015*(f**4) ],
-                                                  [0.015*(f**5),  0.015*(f**5) ],  [0.015*(f**5)/2,  0.015*(f**5) ]]),requires_grad=False).cuda()
-        self.anchors_hw5 = Variable(torch.Tensor([[0.015*(f**6),  0.015*(f**6) ],  [0.015*(f**6)/2,  0.015*(f**6) ],
-                                                  [0.015*(f**7),  0.015*(f**7) ],  [0.015*(f**7)/2,  0.015*(f**7) ],
-                                                  [0.015*(f**8),  0.015*(f**8) ],  [0.015*(f**8)/2,  0.015*(f**8) ]]),requires_grad=False).cuda()
-        self.anchors_hw6 = Variable(torch.Tensor([[0.015*(f**9),  0.015*(f**9) ],  [0.015*(f**9)/2,  0.015*(f**9) ],
-                                                  [0.015*(f**10), 0.015*(f**10) ], [0.015*(f**10)/2, 0.015*(f**10) ],
-                                                  [0.015*(f**11), 0.015*(f**11) ], [0.015*(f**11)/2, 0.015*(f**11) ]]),requires_grad=False).cuda()
+
+        #scales = [16, 21, 27, 36, 47, 62, 82, 107, 141, 186, 244, 320]
+        self.anchors_hw3 = Variable(torch.Tensor([[16, 16],  [16/1.5, 16],
+                                                  [21, 21],  [21/1.5, 21],
+                                                  [27, 27],  [27/1.5, 27]]),requires_grad=False).cuda()
+        self.anchors_hw4 = Variable(torch.Tensor([[36, 36],  [36/1.5, 36],
+                                                  [47, 47],  [47/1.5, 47],
+                                                  [62, 62],  [62/1.5, 62]]),requires_grad=False).cuda()
+        self.anchors_hw5 = Variable(torch.Tensor([[82, 82],  [82/1.5, 82],
+                                                  [107, 107],  [107/1.5, 107],
+                                                  [141, 141],  [141/1.5, 141]]),requires_grad=False).cuda()
+        self.anchors_hw6 = Variable(torch.Tensor([[186, 186],  [186/1.5, 186],
+                                                  [244, 244],  [244/1.5, 244],
+                                                  [320, 320],  [320/1.5, 320]]),requires_grad=False).cuda()
         self.create_anchors_and_boxes = CreateAnchorsAndBoxes()
         
     def forward(self, x, phase = "train"):
+        _, _, height, width = x.size()
         x = self.BN(x)
         conv3 = self.conv3(x)
         bottleneck_conv3 = self.bottleneck_conv3(conv3)
@@ -159,24 +160,26 @@ class FaceNet(nn.Module):
 
         offsets6 = self.regressor_head(out6)
         classes6 = self.classification_head(out6)
-        boxes6, classes6, anchors6 = self.create_anchors_and_boxes(offsets6, classes6, self.anchors_hw6)
+        boxes6, classes6, anchors6 = self.create_anchors_and_boxes(offsets6, classes6, self.anchors_hw6, height, width)
 
         offsets5 = self.regressor_head(out5)
         classes5 = self.classification_head(out5)
-        boxes5, classes5, anchors5 = self.create_anchors_and_boxes(offsets5, classes5, self.anchors_hw5)
+        boxes5, classes5, anchors5 = self.create_anchors_and_boxes(offsets5, classes5, self.anchors_hw5, height, width)
 
         offsets4 = self.regressor_head(out4)
         classes4 = self.classification_head(out4)
-        boxes4, classes4, anchors4 = self.create_anchors_and_boxes(offsets4, classes4, self.anchors_hw4)
+        boxes4, classes4, anchors4 = self.create_anchors_and_boxes(offsets4, classes4, self.anchors_hw4, height, width)
 
         offsets3 = self.regressor_head(out3)
         classes3 = self.classification_head(out3)
-        boxes3, classes3, anchors3 = self.create_anchors_and_boxes(offsets3, classes3, self.anchors_hw3)
+        boxes3, classes3, anchors3 = self.create_anchors_and_boxes(offsets3, classes3, self.anchors_hw3, height, width)
 
         #concat all the predictions
         boxes = torch.cat((boxes3, boxes4, boxes5, boxes6), dim=1)
         classes = torch.cat((classes3, classes4, classes5, classes6), dim=1)
         anchors = torch.cat((anchors3, anchors4, anchors5, anchors6), dim=0)
+
+        sizes = [boxes3.size(1), boxes4.size(1), boxes5.size(1), boxes6.size(1)]
 
         if phase == "train":
             return boxes, classes, anchors

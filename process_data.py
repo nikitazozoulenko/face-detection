@@ -34,7 +34,7 @@ def read_WIDERFace(txt_dir = "/hdd/Data/wider_face_split/wider_face_train_bbx_gt
                     i += 1
                     
     paths = [[images_filenames[i], gt_unprocessed[i], im_num_objects[i]] for i in range(len(images_filenames))]
-    return paths
+    return paths #paths[3125:3126] is the max number of objs
 
 def get_paths_train():
     return read_WIDERFace(txt_dir = "/hdd/Data/wider_face_split/wider_face_train_bbx_gt.txt",
@@ -111,12 +111,20 @@ def make_batch_from_list(cumulative_batch):
     images = [x[0] for x in cumulative_batch]
     gt = [x[1] for x in cumulative_batch]
     num_objects = [x[2] for x in cumulative_batch]
-    width = 512
-    random = np.random.randint(0,3)
+    width = 448
+    random = np.random.randint(0,4)
     resize_size = (width + 64*random, width + 64*random)
     resized_images = [np.asarray(Image.fromarray(image).resize(resize_size)) for image in images]
     
     max_batch_objects  = max(num_objects)
-    gt = np.array(gt)[:, 0:max_batch_objects, :]
+    gt = np.array(gt)[:, 0:max_batch_objects, :] *(width+64*random)
     
     return np.array(resized_images).astype(np.float32), gt, np.array(num_objects)
+
+if __name__ == "__main__":
+    paths = read_WIDERFace()
+    objs = np.array([x[2] for x in paths])
+    print(objs)
+    idx = np.argmax(objs)
+    print(idx)
+    print(paths[idx:idx+1])

@@ -36,7 +36,7 @@ class ClassLoss(nn.Module):
 class CoordLoss(nn.Module):
     def __init__(self):
         super(CoordLoss, self).__init__()
-        self.l1_loss = nn.L1Loss(size_average=True)
+        self.l1_loss = nn.SmoothL1Loss(size_average=True)
 
     def forward(self, boxes, gt, positive_idx):
         #boxes,       size [S*S*A,       4]
@@ -53,17 +53,11 @@ class CoordLoss(nn.Module):
 
 def match(threshhold, neg_threshhold, anchors, gt):
     ious = jaccard(anchors, gt)
-    best_gt_iou, best_gt_idx = ious.max(0)
-    num_objects = best_gt_idx.size(0)
 
     positive_mask = ious >= threshhold
     negative_mask = ious < threshhold
     not_negative_mask = ious > neg_threshhold
     ignore_mask = negative_mask * not_negative_mask
-
-    for obj_idx, anchor_idx in enumerate(best_gt_idx.data):
-        positive_mask[anchor_idx, obj_idx] = 1
-        ignore_mask[anchor_idx, obj_idx] = 0
 
     positive_idx = torch.nonzero(positive_mask)
     ignore_idx = torch.nonzero(ignore_mask)
@@ -80,20 +74,22 @@ class Loss(nn.Module):
         #batch_classes,    size [batch_size,       S*S*A,  K+1]
         #batch_gt,         size [batch_size, max_num_obj,  4]
         #batch_num_objects size [batch_size, max_num_obj]
-        threshhold = 0.45
-        neg_threshhold = 0.3
+        threshhold = 0.50
+        neg_threshhold = 0.4
         ALPHA_CLASS = 1
-        ALPHA_COORD = 1/3
+        ALPHA_COORD = 1
         R = batch_classes.size(0)
-        class_loss = 0
-        coord_loss = 0
+        class_loss = Variable(torch.zeros(1).cuda())
+        coord_loss = Variable(torch.zeros(1).cuda())
         
         for boxes, classes, gt, num_objects in zip(batch_boxes, batch_classes, batch_gt, batch_num_objects):
             gt = gt[:num_objects]
             positive_idx, ignore_idx = match(threshhold, neg_threshhold, anchors, gt)
-            class_loss += self.class_loss(classes, positive_idx, ignore_idx)
-            coord_loss += self.coord_loss(boxes, gt, positive_idx)
-
+            try:
+                class_loss += self.class_loss(classes, positive_idx, ignore_idx)
+                coord_loss += self.coord_loss(boxes, gt, positive_idx)
+            except Exception as e:
+                print(e)
         class_loss = class_loss * ALPHA_CLASS / R
         coord_loss = coord_loss * ALPHA_COORD / R
         total_loss = class_loss + coord_loss

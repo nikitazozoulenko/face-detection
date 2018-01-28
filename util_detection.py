@@ -15,8 +15,7 @@ def draw_and_show_boxes(cuda_image, cuda_boxes, border_size, color):
         im = im.resize((width, width))
     
         dr = ImageDraw.Draw(im)
-        boxes = np.copy(boxes)
-        boxes = (boxes * width).astype(int)
+        boxes = np.copy(boxes).astype(int)
         for box in boxes:
             x0 = box[0]
             y0 = box[1]
