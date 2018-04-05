@@ -33,8 +33,8 @@ def decrease_lr(optimizer):
     
 
 def main():
-    train_data_feeder = DataFeeder(get_paths_train, preprocess_workers=1, cuda_workers=1,
-                                numpy_size=14, cuda_size=2, batch_size=2)
+    train_data_feeder = DataFeeder(get_paths_train, preprocess_workers=4, cuda_workers=1,
+                                numpy_size=14, cuda_size=2, batch_size=8)
     val_data_feeder = DataFeeder(get_paths_val, preprocess_workers=1, cuda_workers=1,
                                 numpy_size=6, cuda_size=1, batch_size=1, jitter = False,
                                 volatile=True)
@@ -46,7 +46,7 @@ def main():
     #model.load_state_dict(torch.load("savedir/facenet_01_it75k.pth"))
     loss = Loss().cuda()
 
-    optimizer = optim.SGD(model.parameters(), lr=0.01,
+    optimizer = optim.SGD(model.parameters(), lr=0.1,
                       momentum=0.9, weight_decay=0.00001)
 
     t_total_logger= Logger("train_total_losses.txt")
@@ -56,7 +56,7 @@ def main():
     v_class_logger= Logger("val_class_losses.txt")
     v_coord_logger= Logger("val_coord_losses.txt")
 
-    for i in range(501):
+    for i in range(50001):
         batch_loss = calc_loss(model, loss, train_data_feeder, i, t_total_logger, t_class_logger, t_coord_logger)
         train(batch_loss, optimizer)
         if i % 20 == 0:
