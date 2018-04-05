@@ -66,7 +66,7 @@ def main():
             model.train()
         #if i in [500000]:
         #    decrease_lr(optimizer)
-        if i % 1000 == 0 and i!= 0:
+        if i % 10000 == 0 and i!= 0:
             torch.save(model.state_dict(), "savedir/facenet_"+version+"_it"+str(i//1000)+"k.pth")
             
     train_data_feeder.kill_queue_threads()
