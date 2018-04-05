@@ -2,63 +2,103 @@ import numpy as np
 from PIL import Image, ImageDraw
 
 import torch
+import torch.nn.functional as F
 from torch.autograd import Variable
 
-def draw_and_show_boxes(cuda_image, cuda_boxes, border_size, color):
-    try:
-        image = cuda_image[0].data.cpu().numpy()
-        boxes = cuda_boxes.data.cpu().numpy()
-        image = np.transpose(image, (1, 2, 0))
+def draw_and_show_boxes(cuda_image, list_boxes, border_size, color):
+    image = cuda_image[0].data.cpu().numpy()
+    image = np.transpose(image, (1, 2, 0))
     
-        im = Image.fromarray((image).astype(np.uint8))
-        width, height = im.size
-        im = im.resize((width, width))
+    im = Image.fromarray((image).astype(np.uint8))
     
-        dr = ImageDraw.Draw(im)
-        boxes = np.copy(boxes).astype(int)
-        for box in boxes:
-            x0 = box[0]
-            y0 = box[1]
-            x1 = box[2]
-            y1 = box[3]
+    dr = ImageDraw.Draw(im)
+    for box in list_boxes:
+        #box = box[0].cpu().numpy().astype(np.int)
+        box = box.int()
+        x0 = box[0]
+        y0 = box[1]
+        x1 = box[2]
+        y1 = box[3]
 
-            for j in range(border_size):
-                final_coords = [x0+j, y0+j, x1-j, y1-j]
-                dr.rectangle(final_coords, outline = color)
-        im.show()
-    except Exception as e:
-        print(e)
-        print("no boxes")
+        for j in range(border_size):
+            final_coords = [x0+j, y0+j, x1-j, y1-j]
+            dr.rectangle(final_coords, outline = color)
+    im.show()
+    return im
 
-def process_draw(threshhold, images, boxes, classes):
-    selected_boxes, selected_classes = process_boxes(threshhold, boxes, classes)
-    draw_and_show_boxes(images, selected_boxes, 2, "red")
-
-def process_boxes(threshhold, batch_boxes, batch_classes):
-    #batch_boxes,      size [batch_size,       S*S*A,  4]
-    #batch_classes,    size [batch_size,       S*S*A,  K+1]
-    boxes = batch_boxes[0, :, :]
-    classes = batch_classes[0, :, :]
+def draw_gt(cuda_image, gt, num_objects):
+    border_size = 2
+    color = "red"
     
+    image = cuda_image[0].data.cpu().numpy()
+    image = np.transpose(image, (1, 2, 0))
+    
+    im = Image.fromarray((image).astype(np.uint8))
+    
+    dr = ImageDraw.Draw(im)
+    for box in gt[0]:
+        box = box.data.cpu().numpy().astype(np.int)
+        x0 = box[0]
+        y0 = box[1]
+        x1 = box[2]
+        y1 = box[3]
+
+        for j in range(border_size):
+            final_coords = [x0+j, y0+j, x1-j, y1-j]
+            dr.rectangle(final_coords, outline = color)
+    im.show()
+
+
+def nms(boxes, classes, threshhold, use_nms = True):
+    """ Perform non-maxima suppression on the boudning boxes
+    with detection probabilities as scores
+    Args:
+      boxes: (tensor) bounding boxes, size [batch_size, H*W*A, 4] OR [H*W*A, 4]
+      classes: (tensor) conficendes, size [batch_size, H*W*A, K+1] OR [H*W*A, K+1].
+    Return:
+      (tensor) the resulting bounding boxes efter nms is applied, size [X,4].
+    """
+    
+    if len(boxes.size()) == 3:
+        boxes = boxes[0]
+    if len(classes.size()) == 3:
+        classes = classes[0]
+
+    classes = F.softmax(classes, dim=1)
     mask = classes > threshhold
     idx = mask[:, 1].nonzero().squeeze()
-    #print("idx", idx)
-    #print("classes", classes)
-    try:
-        selected_boxes = boxes.index_select(0, idx)
-        selected_classes = classes.index_select(0, idx)
-        #print("SELECTED BOXES", selected_boxes)
-        #print("SELECTED CLASSES", selected_classes)
-        return selected_boxes, selected_classes
-    except Exception:
-        #print("EXCEPTION")
-        return None, None
+    if not len(idx.size()):
+        return []
+    selected_boxes = boxes.index_select(0, idx)
+    selected_classes = classes.index_select(0, idx)[:,1]
+    
+    if(not use_nms):
+        return selected_boxes
+    
+    confidences, indices = torch.sort(selected_classes, descending = True)
+    boxes = selected_boxes[indices]
 
+    processed_boxes = []
+    while len(boxes.size()):
+        highest = boxes[0:1]
+        processed_boxes += [highest]
+        if boxes.size(0) == 1:
+            break
+        below = boxes[1:]
+        
+        ious = jaccard(below, highest)
+        mask = (ious < 0.5).expand(-1,4)
+        boxes = below[mask].view(-1, 4)
+
+    return torch.cat(processed_boxes, dim = 0)
+    
+def process_draw(threshhold, images, boxes, classes, use_nms = True, border_size = 6, colour = "red"):
+    processed_boxes = nms(boxes, classes, threshhold, use_nms)
+    return draw_and_show_boxes(images, processed_boxes, border_size, colour)
 
 ###I CANT FIGURE OUT HOW TO FIX MY OWN IOU FUNCTION,
 ###IT IS CORRECT EXCEPT FOR SOME EXAMPLES WHICH IT GIVES IOU>1,
 ###MAJOIRTY OF EXAMPLES ARE CORRECT THOUGH, FROM NOW ON USING
-
 ### NEW IOU CODE FROM https://github.com/amdegroot/ssd.pytorch
 
 def intersect(box_a, box_b):

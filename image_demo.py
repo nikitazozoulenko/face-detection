@@ -9,41 +9,40 @@ from torch.autograd import Variable
 import numpy as np
 import matplotlib.pyplot as plt
 
-from detection_network import *
+from network import FaceNet
 from data_feeder import DataFeeder
-from util_detection import *
-from process_data import *
-from loss import *
+from process_data import get_paths_train, get_paths_val
+from util_detection import process_draw
 
-train_data_feeder = DataFeeder(get_paths_train, read_single_example, make_batch_from_list, preprocess_workers = 8, cuda_workers = 1, numpy_size = 20, cuda_size = 3, batch_size = 1)
-val_data_feeder = DataFeeder(get_paths_val, read_single_example, make_batch_from_list,
-                               preprocess_workers = 4, cuda_workers = 1,
-                               numpy_size = 10, cuda_size = 2, batch_size = 1)
+train_data_feeder = DataFeeder(get_paths_train, preprocess_workers = 8, cuda_workers = 1, numpy_size = 20, cuda_size = 3, batch_size = 1, volatile = True)
+val_data_feeder = DataFeeder(get_paths_val, preprocess_workers = 4, cuda_workers = 1,
+                               numpy_size = 10, cuda_size = 2, batch_size = 1, jitter = False, volatile = True)
 train_data_feeder.start_queue_threads()
 val_data_feeder.start_queue_threads()
 
 #model = torch.load("savedir/facenet0o001.pt")
-model = torch.load("savedir/facenet_4_10k.pt")
+#model = torch.load("savedir/facenet_1_0.003_it200k.pt")
+model = torch.load("savedir/facenet_1_it10k.pt")
 model.eval()
 
-model2 = torch.load("savedir/facenet_4_100k.pt")
+model2 = torch.load("savedir/facenet_1_it10k.pt")
 model2.eval()
 
 
 def test_model(images, model):
-    boxes, classes = model(images, phase = "test")
-    #process_draw(0.1, images, boxes, classes)
-    #process_draw(0.2, images, boxes, classes)
-    #process_draw(0.3, images, boxes, classes)
-    process_draw(0.4, images, boxes, classes)
-    #process_draw(0.5, images, boxes, classes)
-    #process_draw(0.6, images, boxes, classes)
-    #process_draw(0.7, images, boxes, classes)
-    #process_draw(0.8, images, boxes, classes)
-    #process_draw(0.9, images, boxes, classes)
+    boxes, classes, anchors = model(images)
+    #process_draw(0.05, images, boxes, classes, use_nms = False)
+    #process_draw(0.2, images, boxes, classes, use_nms = False)
+    #process_draw(0.3, images, boxes, classes, use_nms = False)
+    process_draw(0.4, images, boxes, classes, use_nms = False, border_size = 1)
+    #process_draw(0.5, images, boxes, classes, use_nms = False)
+    #process_draw(0.6, images, anchors, classes, use_nms = False, border_size = 1)
+    #process_draw(0.7, images, boxes, classes, use_nms = False)
+    #process_draw(0.8, images, boxes, classes, use_nms = True)
+    #process_draw(0.9, images, boxes, classes, use_nms = False)
     
 
-num_iterations = 1
+num_iterations = 5
 for i in range(num_iterations):
     print(i)
     _, batch = train_data_feeder.get_batch()
@@ -54,6 +53,6 @@ for i in range(num_iterations):
 
     
 train_data_feeder.kill_queue_threads()
-val_data_feeder.start_queue_threads()
+val_data_feeder.kill_queue_threads()
 
 
