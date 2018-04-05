@@ -56,7 +56,7 @@ def main():
     v_class_logger= Logger("val_class_losses.txt")
     v_coord_logger= Logger("val_coord_losses.txt")
 
-    for i in range(50001):
+    for i in range(15001):
         batch_loss = calc_loss(model, loss, train_data_feeder, i, t_total_logger, t_class_logger, t_coord_logger)
         train(batch_loss, optimizer)
         if i % 20 == 0:
@@ -66,7 +66,7 @@ def main():
             model.train()
         #if i in [500000]:
         #    decrease_lr(optimizer)
-        if i % 10000 == 0 and i!= 0:
+        if i % 15000 == 0 and i!= 0:
             torch.save(model.state_dict(), "savedir/facenet_"+version+"_it"+str(i//1000)+"k.pth")
             
     train_data_feeder.kill_queue_threads()
