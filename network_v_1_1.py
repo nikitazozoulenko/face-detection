@@ -2,10 +2,13 @@ import torch
 import torch.nn as nn
 import torchvision
 from torchvision import models
+import torch.autograd as autograd
 from torch.autograd import Variable
 from torch.nn import Parameter
-
+import torch.nn.functional as F
 import numpy as np
+
+from util_detection import jaccard
 
 class ResidualBlock(nn.Module):
     def __init__(self, channels, expansion = 4, cardinality = 1):
@@ -28,37 +31,6 @@ class ResidualBlock(nn.Module):
         out = self.relu(out+res)
         
         return out
-    
-
-def make_anchors_and_bbox(offsets, classes, anchors_hw, height, width):
-    #offsets shape [batch_size, 4A, S, S]
-    #anchors shape [A, 2]
-    #classes shape [batch_size, (K+1)A, S, S]
-    R, C, H, W = list(classes.size())
-    A, _ = list(anchors_hw.size())
-
-    #RESHAPE OFFSETS
-    offsets = offsets.view(R,-1, A*H*W).permute(0,2,1)
-            
-    #RESHAPE CLASSES
-    classes = classes.view(R,-1, A*H*W).permute(0,2,1)
-            
-    #EXPAND CENTER COORDS
-    x_coords = ((torch.arange(W).cuda()+0.5)/W*width).expand(H, W)
-    y_coords = ((torch.arange(H).cuda()+0.5)/H*height).expand(W, H).t()
-    coord_grid = torch.stack((x_coords, y_coords), dim = 0)
-    coords = coord_grid.view(2,-1).t().expand(A, -1, -1)
-    anch = anchors_hw.unsqueeze(1).expand(-1,H*W,-1)
-
-    anchors_min = coords - anch/2
-    anchors_max = anchors_min + anch
-    anchors_min = anchors_min.view(-1,2)
-    anchors_max = anchors_max.view(-1,2)
-            
-    anchors = Variable(torch.cat((anchors_min, anchors_max), dim = 1))
-    boxes = offsets + anchors
-
-    return boxes, classes, anchors        
 
 
 class PredictionHead(nn.Module):
@@ -101,14 +73,12 @@ class RegressionHead(nn.Module):
 class ClassificationHead(nn.Module):
     def __init__(self):
         super(ClassificationHead, self).__init__()
-        K = 1
         A = 6
         pi = 0.001
-        bias = np.log(K*(1-pi)/pi)
-        self.prior = Parameter(torch.cuda.FloatTensor([[bias]]).expand(A, -1, -1))
+        bias = np.log((1-pi)/pi)
+        self.prior = Parameter(torch.FloatTensor([[bias]]).expand(A, -1, -1))
         
         self.background = nn.Conv2d(256,   A, kernel_size=3, stride=1, padding=1, bias = False)
-        self.foreground = nn.Conv2d(256, A*K, kernel_size=3, stride=1, padding=1, bias = True)
 
         channels = 64
         expansion = 4
@@ -209,3 +179,128 @@ class FaceNet(nn.Module):
         classes =torch.cat((classes2, classes3, classes4, classes5, classes6), dim=1)
         anchors = torch.cat((anchors2, anchors3, anchors4, anchors5, anchors6), dim=0)
         return boxes, classes, anchors
+
+
+def make_anchors_and_bbox(offsets, classes, anchors_wh, height, width):
+    #offsets shape [batch_size, 4A, H, W]
+    #anchors shape [A, 2]
+    #classes shape [batch_size, A, H, W]
+    R, A, H, W = classes.size()
+
+    #RESHAPE OFFSETS
+    offsets = offsets.view(R, 4, A*H*W).permute(0,2,1)
+            
+    #RESHAPE CLASSES
+    classes = classes.view(R, A*H*W)
+            
+    #EXPAND CENTER COORDS
+    x_coords = ((torch.arange(W)+0.5)/W*width).expand(H, W)
+    y_coords = ((torch.arange(H)+0.5)/H*height).expand(W, H).t()
+    coord_grid = torch.stack((x_coords,y_coords), dim = 2) #H-dim, W-dim, (x,y)
+    coord_grid = coord_grid.expand(A,-1,-1,-1) #A-dim, H-dim, W-dim, (x,y)
+    coords = coord_grid.contiguous().view(-1, 2) #AHW, 2
+    anch = anchors_wh.unsqueeze(1).expand(-1,H*W,-1).contiguous().view(-1, 2) #AHW, 2
+
+    anchors_min = coords - anch/2
+    anchors_max = anchors_min + anch
+            
+    anchors = Variable(torch.cat((anchors_min, anchors_max), dim = 1), requires_grad = False)
+    boxes = offsets + anchors
+
+    return boxes, classes, anchors
+
+
+
+
+
+
+class ClassLoss(nn.Module):
+    def __init__(self):
+        super(ClassLoss, self).__init__()
+        self.cross_entropy = nn.CrossEntropyLoss(weight=torch.cuda.FloatTensor([1,3]), size_average=True, reduce=True)
+
+    def forward(self, classes, positive_idx):
+        gather_pos = torch.zeros(classes.size(0), out=torch.LongTensor()).cuda()
+        if len(positive_idx) != 0:
+            positive_idx = positive_idx[:,0]
+            gather_pos.index_fill_(0, positive_idx.data, 1)
+        indices = Variable(gather_pos)
+
+        loss = self.cross_entropy(classes, indices)
+        return loss
+
+
+class CoordLoss(nn.Module):
+    def __init__(self):
+        super(CoordLoss, self).__init__()
+        self.l1_loss = nn.SmoothL1Loss(size_average=True)
+
+    def forward(self, boxes, gt, pos, idx):
+        #boxes,       size [S*S*A,       4]
+        #gt,          size [num_obj, 4]
+        #positive_idx size [num_matches, 2]
+        if len(pos) != 0:
+            pred_idx = pos.squeeze()
+            gt_idx = idx.squeeze()
+
+            selected_pred = boxes.index_select(0, pred_idx)
+            selected_gt = gt.index_select(0, gt_idx)
+
+            coord_loss = self.l1_loss(selected_pred, selected_gt)
+            return coord_loss
+        else:
+            return 0
+
+def match(threshhold, anchors, gts):
+    pos = []
+    idx = []
+    for i, gt in enumerate(gts):
+        ious = jaccard(anchors, gt.unsqueeze(0))
+        pos_mask = ious.squeeze() >= threshhold
+        indices = torch.nonzero(pos_mask)
+        if len(indices) != 0:
+            pos += [indices]
+            idx += [torch.cuda.LongTensor(indices.size()).fill_(i)]
+    if len(pos) != 0:
+        return Variable(torch.cat(pos, dim=0)), Variable(torch.cat(idx, dim=0))
+    else:
+        return pos, idx
+    
+class Loss(nn.Module):
+    def __init__(self):
+        super(Loss, self).__init__()
+        self.class_loss = ClassLoss()
+        self.coord_loss = CoordLoss()
+
+    def forward(self, batch_boxes, batch_classes, anchors, batch_gt, batch_num_objects):
+        #batch_boxes,      size [batch_size,       S*S*A,  4]
+        #batch_classes,    size [batch_size,       S*S*A,  K+1]
+        #batch_gt,         size [batch_size, max_num_obj,  4]
+        #batch_num_objects size [batch_size, max_num_obj]
+        threshhold = 0.55
+        R = batch_gt.size(0)
+        class_loss = Variable(torch.zeros(1).cuda())
+        coord_loss = Variable(torch.zeros(1).cuda())
+        
+        for boxes, classes, gt, num_objects in zip(batch_boxes, batch_classes, batch_gt, batch_num_objects):
+            gt = gt[:num_objects]
+            pos, idx = match(threshhold, anchors.data, gt.data)
+            class_loss += self.class_loss(classes, pos)
+            coord_loss += self.coord_loss(boxes, gt, pos, idx)
+        class_loss = class_loss / R
+        coord_loss = coord_loss / R / 1000
+        total_loss = class_loss + coord_loss
+        return total_loss, class_loss, coord_loss
+
+
+nn.BCEWithLogitsLoss
+if __name__ == "__main__":
+    A = 6
+    height = 128
+    width = 128
+    offsets = Variable(torch.Tensor(3, 4*A, 32, 32))
+    classes = Variable(torch.Tensor(3, A, 32, 32))
+    anchors_wh2 = torch.Tensor([[16, 16],  [16, 16*2],
+                                         [20, 20],  [20, 20*2],
+                                         [25, 25],  [25, 25*2]])
+    result = make_anchors_and_bbox(offsets, classes, anchors_wh2, height, width)

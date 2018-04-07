@@ -2,11 +2,10 @@ import torch
 import torch.optim as optim
 import matplotlib.pyplot as plt
 
-from network import FaceNet
+from network_v_1_0 import FaceNet, Loss
 from data_feeder import DataFeeder
 from util_detection import process_draw
 from process_data import get_paths_train, get_paths_val
-from loss import Loss
 from logger import Logger
 
 def train(batch_loss, optimizer):

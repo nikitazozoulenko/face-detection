@@ -90,7 +90,7 @@ class Loss(nn.Module):
         #batch_classes,    size [batch_size,       S*S*A,  K+1]
         #batch_gt,         size [batch_size, max_num_obj,  4]
         #batch_num_objects size [batch_size, max_num_obj]
-        threshhold = 0.54
+        threshhold = 0.55
         R = batch_gt.size(0)
         class_loss = Variable(torch.zeros(1).cuda())
         coord_loss = Variable(torch.zeros(1).cuda())
@@ -182,7 +182,7 @@ if __name__ == "__main__":
     print("FL", fl_classes.grad)
 
     from torch.autograd import gradcheck
-    # gradchek takes a tuple of tensor as input, check if your gradient
+    # gradcheck takes a tuple of tensor as input, check if your gradient
     # evaluated with these tensors are close enough to numerical
     # approximations and returns True if they all verify this condition.
     input = (Variable(torch.cuda.FloatTensor([[0.6, 0.4], [0.3, 0.7], [0.9, 0.1]]), requires_grad = True),  Variable(torch.cuda.LongTensor([0, 1, 0])),
