@@ -272,7 +272,7 @@ class Loss(nn.Module):
         #batch_classes,    size [batch_size,       S*S*A,  K+1]
         #batch_gt,         size [batch_size, max_num_obj,  4]
         #batch_num_objects size [batch_size, max_num_obj]
-        threshhold = 0.54
+        threshhold = 0.55
         R = batch_gt.size(0)
         class_loss = Variable(torch.zeros(1).cuda())
         coord_loss = Variable(torch.zeros(1).cuda())
