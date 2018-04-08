@@ -33,9 +33,9 @@ def decrease_lr(optimizer):
 
 def main():
     train_data_feeder = DataFeeder(get_paths_train, preprocess_workers=4, cuda_workers=1,
-                                numpy_size=14, cuda_size=2, batch_size=8, jitter=True)
+                                numpy_size=14, cuda_size=4, batch_size=8, jitter=True)
     val_data_feeder = DataFeeder(get_paths_val, preprocess_workers=1, cuda_workers=1,
-                                numpy_size=6, cuda_size=1, batch_size=8, jitter = True,
+                                numpy_size=6, cuda_size=1, batch_size=4, jitter = True,
                                 volatile=True)
     train_data_feeder.start_queue_threads()
     val_data_feeder.start_queue_threads()
@@ -45,7 +45,7 @@ def main():
     #model.load_state_dict(torch.load("savedir/facenet_01_it75k.pth"))
     loss = Loss().cuda()
 
-    optimizer = optim.SGD(model.parameters(), lr=0.1,
+    optimizer = optim.SGD(model.parameters(), lr=0.01,
                       momentum=0.9, weight_decay=0.00001)
 
     t_total_logger= Logger("train_total_losses.txt")
@@ -63,8 +63,8 @@ def main():
             model.eval()
             calc_loss(model, loss, val_data_feeder, i, v_total_logger, v_class_logger, v_coord_logger)
             model.train()
-        #if i in [500000]:
-        #    decrease_lr(optimizer)
+        if i in [30000]:
+            decrease_lr(optimizer)
         if i % 5000 == 0 and i!= 0:
             torch.save(model.state_dict(), "savedir/facenet_"+version+"_it"+str(i//1000)+"k.pth")
             
