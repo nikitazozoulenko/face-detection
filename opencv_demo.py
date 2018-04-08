@@ -9,6 +9,7 @@ from torch.autograd import Variable
 import cv2
 
 from util_detection import nms
+from network_v_1_0 import FaceNet
 
 class WebcamVideoStream:
     def __init__(self, src=0):
@@ -27,7 +28,7 @@ class WebcamVideoStream:
         return self
  
     def update(self):
-        # keep looping infinitely until the thread is stopped
+        # keep looping infinitely until the libgtkglext-x11-1.0.so.0:thread is stopped
         while True:
             # if the thread indicator variable is set, stop the thread
             if self.stopped:
@@ -46,8 +47,10 @@ class WebcamVideoStream:
 def numpy_to_cuda(numpy_array):
     return Variable(torch.from_numpy(numpy_array).cuda().permute(2,0,1).float().unsqueeze(0), volatile=True)
 
-#model = torch.load("savedir/facenet_1_0.003_it200k.pt")
-model = torch.load("savedir/facenet_1_it10k.pt")
+
+model = FaceNet().cuda()
+model.load_state_dict(torch.load("savedir/facenet_01_it35k.pth"))
+model.eval()
     
 # created a *threaded* video stream, allow the camera sensor to warmup,
 # and start the FPS counter
@@ -56,9 +59,9 @@ while True:
     frame = stream.read()
     frame = cv2.resize(frame, (640, 512))
     
-    cuda_frame = numpy_to_cuda(frame)
+    cuda_frame = numpy_tanchorso_cuda(frame)
     boxes, classes, anchors = model(cuda_frame)
-    processed_boxes = nms(anchors, classes, 0.7, use_nms = True)
+    processed_boxes = nms(boxes, classes, 0.9, use_nms = True)
 
     for box in processed_boxes:
         box = box.int()

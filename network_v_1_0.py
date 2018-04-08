@@ -283,6 +283,6 @@ class Loss(nn.Module):
             class_loss += self.class_loss(classes, pos)
             coord_loss += self.coord_loss(boxes, gt, pos, idx)
         class_loss = class_loss / R
-        coord_loss = coord_loss / R / 1000
+        coord_loss = coord_loss / R / 10000
         total_loss = class_loss + coord_loss
         return total_loss, class_loss, coord_loss

@@ -19,7 +19,7 @@ class Grapher():
         return values, indices
 
 
-    def values2ewma(self, losses, alpha = 0.9):
+    def values2ewma(self, losses, alpha = 0.0):
         losses_ewma = []
         ewma = losses[0]
         for loss in losses:
@@ -72,18 +72,18 @@ if __name__ == "__main__":
                   ["b", "g"],
                   ["train total", "val total"],
                   "Loss", "Iterations",
-                  list_ewmas = [0.9, 0.9])
+                  list_ewmas = [0.7, 0.7])
 
     grapher.graph([t_cls, v_cls],
                   [t_cls_ind, v_cls_ind],
                   ["b", "g"],
                   ["train class", "val class"],
                   "Loss", "Iterations",
-                  list_ewmas = [0.9, 0.9])
+                  list_ewmas = [0.7, 0.7])
     
     grapher.graph([t_coord, v_coord],
                   [t_coord_ind, v_coord_ind],
                   ["b", "g"],
                   ["train coord", "val coord"],
                   "Loss", "Iterations",
-                  list_ewmas = [0.9, 0.9])
+                  list_ewmas = [0.7, 0.7])
