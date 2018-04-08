@@ -45,7 +45,7 @@ def main():
     #model.load_state_dict(torch.load("savedir/facenet_01_it75k.pth"))
     loss = Loss().cuda()
 
-    optimizer = optim.SGD(model.parameters(), lr=0.1,
+    optimizer = optim.SGD(model.parameters(), lr=1,
                       momentum=0.9, weight_decay=0.00001)
 
     t_total_logger= Logger("train_total_losses.txt")

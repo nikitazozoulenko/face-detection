@@ -37,7 +37,7 @@ def test_model(images, model):
     #process_draw(0.4, images, boxes, classes, use_nms = False, border_size = 1)
     #process_draw(0.5, images, boxes, classes, use_nms = False)
     #process_draw(0.6, images, anchors, classes, use_nms = False, border_size = 1)
-    process_draw(0.7, images, boxes, classes, use_nms = False)
+    process_draw(0.7, images, boxes, classes, use_nms = False, softmax=True)
     #process_draw(0.8, images, boxes, classes, use_nms = True)
     #process_draw(0.9, images, boxes, classes, use_nms = False)
     
