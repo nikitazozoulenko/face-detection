@@ -54,28 +54,23 @@ def nms(boxes, classes, threshhold, use_nms = True, softmax = False):
     with detection probabilities as scores
     Args:
       boxes: (tensor) bounding boxes, size [batch_size, H*W*A, 4] OR [H*W*A, 4]
-      classes: (tensor) conficendes, size [batch_size, H*W*A, K+1] OR [H*W*A, K+1].
+      classes: (tensor) conficendes, size [batch_size, H*W*A] OR [H*W*A].
     Return:
       (tensor) the resulting bounding boxes efter nms is applied, size [X,4].
     """
     
     if len(boxes.size()) == 3:
         boxes = boxes[0]
-    if len(classes.size()) == 3:
+    if len(classes.size()) == 2:
         classes = classes[0]
 
-    if softmax:
-        classes = F.softmax(classes, dim=1)
-    else:
-        classes = F.sigmoid(classes)
+    classes = F.sigmoid(classes)
     mask = classes > threshhold
     idx = mask.nonzero().squeeze()
     if not len(idx.size()):
         return []
-    print(boxes)
     selected_boxes = boxes.index_select(0, idx)
-    print(selected_boxes)
-    selected_classes = classes.index_select(0, idx)[:,1]
+    selected_classes = classes.index_select(0, idx)
     
     if(not use_nms):
         return selected_boxes

@@ -96,7 +96,6 @@ class ClassificationHead(nn.Module):
         #x shape [batch_size, 256, H, W]
         x = self.residual(x)
         return self.conf_predictions(x) + self.prior
-
     
 
 class FaceNet(nn.Module):
@@ -290,7 +289,6 @@ class Loss(nn.Module):
         return total_loss, class_loss, coord_loss
 
 
-nn.BCEWithLogitsLoss
 if __name__ == "__main__":
     A = 6
     height = 128
