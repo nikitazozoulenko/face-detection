@@ -49,7 +49,7 @@ def draw_gt(cuda_image, gt, num_objects):
     im.show()
 
 
-def nms(boxes, classes, threshhold, use_nms = True):
+def nms(boxes, classes, threshhold, use_nms = True, softmax = False):
     """ Perform non-maxima suppression on the boudning boxes
     with detection probabilities as scores
     Args:
@@ -64,12 +64,17 @@ def nms(boxes, classes, threshhold, use_nms = True):
     if len(classes.size()) == 3:
         classes = classes[0]
 
-    classes = F.softmax(classes, dim=1)
+    if softmax:
+        classes = F.softmax(classes, dim=1)
+    else:
+        classes = F.sigmoid(classes)
     mask = classes > threshhold
-    idx = mask[:, 1].nonzero().squeeze()
+    idx = mask.nonzero().squeeze()
     if not len(idx.size()):
         return []
+    print(boxes)
     selected_boxes = boxes.index_select(0, idx)
+    print(selected_boxes)
     selected_classes = classes.index_select(0, idx)[:,1]
     
     if(not use_nms):
@@ -92,8 +97,8 @@ def nms(boxes, classes, threshhold, use_nms = True):
 
     return torch.cat(processed_boxes, dim = 0)
     
-def process_draw(threshhold, images, boxes, classes, use_nms = True, border_size = 6, colour = "red"):
-    processed_boxes = nms(boxes, classes, threshhold, use_nms)
+def process_draw(threshhold, images, boxes, classes, use_nms = True, border_size = 6, colour = "red", softmax = False):
+    processed_boxes = nms(boxes, classes, threshhold, use_nms, softmax=softmax)
     return draw_and_show_boxes(images, processed_boxes, border_size, colour)
 
 ###I CANT FIGURE OUT HOW TO FIX MY OWN IOU FUNCTION,

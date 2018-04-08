@@ -59,7 +59,7 @@ while True:
     frame = stream.read()
     frame = cv2.resize(frame, (640, 512))
     
-    cuda_frame = numpy_tanchorso_cuda(frame)
+    cuda_frame = numpy_to_cuda(frame)
     boxes, classes, anchors = model(cuda_frame)
     processed_boxes = nms(boxes, classes, 0.9, use_nms = True)
 

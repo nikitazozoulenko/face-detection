@@ -75,10 +75,10 @@ class ClassificationHead(nn.Module):
         super(ClassificationHead, self).__init__()
         A = 6
         pi = 0.001
-        bias = np.log((1-pi)/pi)
-        self.prior = Parameter(torch.FloatTensor([[bias]]).expand(A, -1, -1))
+        bias = -np.log((1-pi)/pi)
+        self.prior = Parameter(torch.FloatTensor([[bias]]).expand(A, -1, -1)).contiguous()
         
-        self.background = nn.Conv2d(256,   A, kernel_size=3, stride=1, padding=1, bias = False)
+        self.conf_predictions = nn.Conv2d(256,   A, kernel_size=3, stride=1, padding=1, bias = False)
 
         channels = 64
         expansion = 4
@@ -95,9 +95,8 @@ class ClassificationHead(nn.Module):
     def forward(self, x):
         #x shape [batch_size, 256, H, W]
         x = self.residual(x)
-        background = self.background(x) + self.prior
-        foreground = self.foreground(x)
-        return torch.cat((background, foreground), dim=1)
+        return self.conf_predictions(x) + self.prior
+
     
 
 class FaceNet(nn.Module):
@@ -128,19 +127,19 @@ class FaceNet(nn.Module):
 
         self.prediction_head =  PredictionHead()
 
-        self.anchors_hw2 = torch.Tensor([[16, 16],  [16, 16*2],
+        self.anchors_wh2 = torch.Tensor([[16, 16],  [16, 16*2],
                                          [20, 20],  [20, 20*2],
                                          [25, 25],  [25, 25*2]]).cuda()
-        self.anchors_hw3 = torch.Tensor([[32, 32],  [32, 32*2],
+        self.anchors_wh3 = torch.Tensor([[32, 32],  [32, 32*2],
                                          [40, 40],  [40, 40*2],
                                          [51, 51],  [51, 51*2]]).cuda()
-        self.anchors_hw4 = torch.Tensor([[64, 64],  [64, 64*2],
+        self.anchors_wh4 = torch.Tensor([[64, 64],  [64, 64*2],
                                          [81, 81],  [81, 81*2],
                                          [102, 102],  [102, 102*2]]).cuda()
-        self.anchors_hw5 = torch.Tensor([[128, 128],  [128, 128*2],
+        self.anchors_wh5 = torch.Tensor([[128, 128],  [128, 128*2],
                                          [161, 161],  [161, 161*2],
                                          [203, 203],  [203, 203*2]]).cuda()
-        self.anchors_hw6 = torch.Tensor([[256, 256],  [256, 256*2],
+        self.anchors_wh6 = torch.Tensor([[256, 256],  [256, 256*2],
                                          [322, 322],  [322, 322*2],
                                          [406, 406],  [406, 406*2]]).cuda()
         
@@ -161,15 +160,15 @@ class FaceNet(nn.Module):
         conv6 = self.bottleneck_conv6(conv6)
 
         offsets6, classes6 = self.prediction_head(conv6)
-        boxes6, classes6, anchors6 = make_anchors_and_bbox(offsets6, classes6, self.anchors_hw6, height, width)
+        boxes6, classes6, anchors6 = make_anchors_and_bbox(offsets6, classes6, self.anchors_wh6, height, width)
         offsets5, classes5 = self.prediction_head(conv5)
-        boxes5, classes5, anchors5 = make_anchors_and_bbox(offsets5, classes5, self.anchors_hw5, height, width)
+        boxes5, classes5, anchors5 = make_anchors_and_bbox(offsets5, classes5, self.anchors_wh5, height, width)
         offsets4, classes4 = self.prediction_head(conv4)
-        boxes4, classes4, anchors4 = make_anchors_and_bbox(offsets4, classes4, self.anchors_hw4, height, width)
+        boxes4, classes4, anchors4 = make_anchors_and_bbox(offsets4, classes4, self.anchors_wh4, height, width)
         offsets3, classes3 = self.prediction_head(conv3)
-        boxes3, classes3, anchors3 = make_anchors_and_bbox(offsets3, classes3, self.anchors_hw3, height, width)
+        boxes3, classes3, anchors3 = make_anchors_and_bbox(offsets3, classes3, self.anchors_wh3, height, width)
         offsets2, classes2 = self.prediction_head(conv2)
-        boxes2, classes2, anchors2 = make_anchors_and_bbox(offsets2, classes2, self.anchors_hw3, height, width)
+        boxes2, classes2, anchors2 = make_anchors_and_bbox(offsets2, classes2, self.anchors_wh3, height, width)
 
         #concat all the predictions
         #boxes = [boxes3, boxes4, boxes5, boxes6, boxes7]
@@ -194,8 +193,8 @@ def make_anchors_and_bbox(offsets, classes, anchors_wh, height, width):
     classes = classes.view(R, A*H*W)
             
     #EXPAND CENTER COORDS
-    x_coords = ((torch.arange(W)+0.5)/W*width).expand(H, W)
-    y_coords = ((torch.arange(H)+0.5)/H*height).expand(W, H).t()
+    x_coords = ((torch.arange(W).cuda()+0.5)/W*width).expand(H, W)
+    y_coords = ((torch.arange(H).cuda()+0.5)/H*height).expand(W, H).t()
     coord_grid = torch.stack((x_coords,y_coords), dim = 2) #H-dim, W-dim, (x,y)
     coord_grid = coord_grid.expand(A,-1,-1,-1) #A-dim, H-dim, W-dim, (x,y)
     coords = coord_grid.contiguous().view(-1, 2) #AHW, 2
@@ -210,24 +209,19 @@ def make_anchors_and_bbox(offsets, classes, anchors_wh, height, width):
     return boxes, classes, anchors
 
 
-
-
-
-
 class ClassLoss(nn.Module):
     def __init__(self):
         super(ClassLoss, self).__init__()
-        self.binary_cross_entropy = nn.BCEWithLogitsLoss(weight=torch.cuda.FloatTensor([3]), 
-                                                        size_average=True, reduce=True)
+        self.binary_cross_entropy = nn.BCEWithLogitsLoss(size_average=True)
 
     def forward(self, classes, positive_idx):
         gather_pos = torch.zeros(classes.size(0), out=torch.LongTensor()).cuda()
         if len(positive_idx) != 0:
             positive_idx = positive_idx[:,0]
             gather_pos.index_fill_(0, positive_idx.data, 1)
-        indices = Variable(gather_pos)
+        indices = Variable(gather_pos.float())
 
-        loss = self.cross_entropy(classes, indices)
+        loss = self.binary_cross_entropy(classes, indices)
         return loss
 
 
