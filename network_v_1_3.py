@@ -1,11 +1,13 @@
-#cross entropy, baseline model
+#binary focal loss
 
 import torch
 import torch.nn as nn
 import torchvision
 from torchvision import models
+import torch.autograd as autograd
 from torch.autograd import Variable
 from torch.nn import Parameter
+import torch.nn.functional as F
 import numpy as np
 
 from util_detection import jaccard
@@ -13,12 +15,14 @@ from util_detection import jaccard
 class ResidualBlock(nn.Module):
     def __init__(self, channels, expansion = 4, cardinality = 1):
         super(ResidualBlock, self).__init__()
+
         self.block = nn.Sequential(nn.Conv2d(channels*expansion, channels, kernel_size=1, bias=False),
                                    nn.BatchNorm2d(channels),
                                    nn.Conv2d(channels, channels, kernel_size=3, padding=1, groups = cardinality, bias=False),
                                    nn.BatchNorm2d(channels),
                                    nn.Conv2d(channels, channels*expansion, kernel_size=1, bias=False),
                                    nn.BatchNorm2d(channels*expansion))
+        
         self.relu = nn.ReLU(inplace = True)
         
         
@@ -29,37 +33,6 @@ class ResidualBlock(nn.Module):
         out = self.relu(out+res)
         
         return out
-    
-
-def make_anchors_and_bbox(offsets, classes, anchors_hw, height, width):
-    #offsets shape [batch_size, 4A, S, S]
-    #anchors shape [A, 2]
-    #classes shape [batch_size, (K+1)A, S, S]
-    R, C, H, W = list(classes.size())
-    A, _ = list(anchors_hw.size())
-
-    #RESHAPE OFFSETS
-    offsets = offsets.view(R,-1, A*H*W).permute(0,2,1)
-            
-    #RESHAPE CLASSES
-    classes = classes.view(R,-1, A*H*W).permute(0,2,1)
-            
-    #EXPAND CENTER COORDS
-    x_coords = ((torch.arange(W).cuda()+0.5)/W*width).expand(H, W)
-    y_coords = ((torch.arange(H).cuda()+0.5)/H*height).expand(W, H).t()
-    coord_grid = torch.stack((x_coords, y_coords), dim = 0)
-    coords = coord_grid.view(2,-1).t().expand(A, -1, -1)
-    anch = anchors_hw.unsqueeze(1).expand(-1,H*W,-1)
-
-    anchors_min = coords - anch/2
-    anchors_max = anchors_min + anch
-    anchors_min = anchors_min.view(-1,2)
-    anchors_max = anchors_max.view(-1,2)
-            
-    anchors = Variable(torch.cat((anchors_min, anchors_max), dim = 1))
-    boxes = offsets + anchors
-
-    return boxes, classes, anchors        
 
 
 class PredictionHead(nn.Module):
@@ -102,14 +75,12 @@ class RegressionHead(nn.Module):
 class ClassificationHead(nn.Module):
     def __init__(self):
         super(ClassificationHead, self).__init__()
-        K = 1
         A = 6
         pi = 0.001
-        bias = np.log(K*(1-pi)/pi)
-        self.prior = Parameter(torch.cuda.FloatTensor([[bias]]).expand(A, -1, -1))
+        bias = -np.log((1-pi)/pi)
+        self.prior = Parameter(torch.FloatTensor([[bias]]).expand(A, -1, -1)).contiguous()
         
-        self.background = nn.Conv2d(256,   A, kernel_size=3, stride=1, padding=1, bias = False)
-        self.foreground = nn.Conv2d(256, A*K, kernel_size=3, stride=1, padding=1, bias = True)
+        self.conf_predictions = nn.Conv2d(256,   A, kernel_size=3, stride=1, padding=1, bias = False)
 
         channels = 64
         expansion = 4
@@ -126,9 +97,7 @@ class ClassificationHead(nn.Module):
     def forward(self, x):
         #x shape [batch_size, 256, H, W]
         x = self.residual(x)
-        background = self.background(x) + self.prior
-        foreground = self.foreground(x)
-        return torch.cat((background, foreground), dim=1)
+        return self.conf_predictions(x) + self.prior
     
 
 class FaceNet(nn.Module):
@@ -159,21 +128,21 @@ class FaceNet(nn.Module):
 
         self.prediction_head =  PredictionHead()
 
-        self.anchors_hw2 = torch.Tensor([[16, 16],  [16*2, 16],
-                                         [20, 20],  [20*2, 20],
-                                         [25, 25],  [25*2, 25]]).cuda()
-        self.anchors_hw3 = torch.Tensor([[32, 32],  [32*2, 32],
-                                         [40, 40],  [40*2, 40],
-                                         [51, 51],  [51*2, 51]]).cuda()
-        self.anchors_hw4 = torch.Tensor([[64, 64],  [64*2, 64],
-                                         [81, 81],  [81*2, 81],
-                                         [102, 102],  [102*2, 102]]).cuda()
-        self.anchors_hw5 = torch.Tensor([[128, 128],  [128*2, 128],
-                                         [161, 161],  [161*2, 161],
-                                         [203, 203],  [203*2, 203]]).cuda()
-        self.anchors_hw6 = torch.Tensor([[256, 256],  [256*2, 256],
-                                         [322, 322],  [322*2, 322],
-                                         [406, 406],  [406*2, 406]]).cuda()
+        self.anchors_wh2 = torch.Tensor([[16, 16],  [16, 16*2],
+                                         [20, 20],  [20, 20*2],
+                                         [25, 25],  [25, 25*2]]).cuda()
+        self.anchors_wh3 = torch.Tensor([[32, 32],  [32, 32*2],
+                                         [40, 40],  [40, 40*2],
+                                         [51, 51],  [51, 51*2]]).cuda()
+        self.anchors_wh4 = torch.Tensor([[64, 64],  [64, 64*2],
+                                         [81, 81],  [81, 81*2],
+                                         [102, 102],  [102, 102*2]]).cuda()
+        self.anchors_wh5 = torch.Tensor([[128, 128],  [128, 128*2],
+                                         [161, 161],  [161, 161*2],
+                                         [203, 203],  [203, 203*2]]).cuda()
+        self.anchors_wh6 = torch.Tensor([[256, 256],  [256, 256*2],
+                                         [322, 322],  [322, 322*2],
+                                         [406, 406],  [406, 406*2]]).cuda()
         
     def forward(self, x, phase = "train"):
         _, _, height, width = x.size()
@@ -192,15 +161,15 @@ class FaceNet(nn.Module):
         conv6 = self.bottleneck_conv6(conv6)
 
         offsets6, classes6 = self.prediction_head(conv6)
-        boxes6, classes6, anchors6 = make_anchors_and_bbox(offsets6, classes6, self.anchors_hw6, height, width)
+        boxes6, classes6, anchors6 = make_anchors_and_bbox(offsets6, classes6, self.anchors_wh6, height, width)
         offsets5, classes5 = self.prediction_head(conv5)
-        boxes5, classes5, anchors5 = make_anchors_and_bbox(offsets5, classes5, self.anchors_hw5, height, width)
+        boxes5, classes5, anchors5 = make_anchors_and_bbox(offsets5, classes5, self.anchors_wh5, height, width)
         offsets4, classes4 = self.prediction_head(conv4)
-        boxes4, classes4, anchors4 = make_anchors_and_bbox(offsets4, classes4, self.anchors_hw4, height, width)
+        boxes4, classes4, anchors4 = make_anchors_and_bbox(offsets4, classes4, self.anchors_wh4, height, width)
         offsets3, classes3 = self.prediction_head(conv3)
-        boxes3, classes3, anchors3 = make_anchors_and_bbox(offsets3, classes3, self.anchors_hw3, height, width)
+        boxes3, classes3, anchors3 = make_anchors_and_bbox(offsets3, classes3, self.anchors_wh3, height, width)
         offsets2, classes2 = self.prediction_head(conv2)
-        boxes2, classes2, anchors2 = make_anchors_and_bbox(offsets2, classes2, self.anchors_hw3, height, width)
+        boxes2, classes2, anchors2 = make_anchors_and_bbox(offsets2, classes2, self.anchors_wh3, height, width)
 
         #concat all the predictions
         #boxes = [boxes3, boxes4, boxes5, boxes6, boxes7]
@@ -211,19 +180,53 @@ class FaceNet(nn.Module):
         anchors = torch.cat((anchors2, anchors3, anchors4, anchors5, anchors6), dim=0)
         return boxes, classes, anchors
 
+
+def make_anchors_and_bbox(offsets, classes, anchors_wh, height, width):
+    #offsets shape [batch_size, 4A, H, W]
+    #anchors shape [A, 2]
+    #classes shape [batch_size, A, H, W]
+    R, A, H, W = classes.size()
+
+    #RESHAPE OFFSETS
+    offsets = offsets.view(R, 4, A*H*W).permute(0,2,1)
+            
+    #RESHAPE CLASSES
+    classes = classes.view(R, A*H*W)
+            
+    #EXPAND CENTER COORDS
+    x_coords = ((torch.arange(W).cuda()+0.5)/W*width).expand(H, W)
+    y_coords = ((torch.arange(H).cuda()+0.5)/H*height).expand(W, H).t()
+    coord_grid = torch.stack((x_coords,y_coords), dim = 2) #H-dim, W-dim, (x,y)
+    coord_grid = coord_grid.expand(A,-1,-1,-1) #A-dim, H-dim, W-dim, (x,y)
+    coords = coord_grid.contiguous().view(-1, 2) #AHW, 2
+    anch = anchors_wh.unsqueeze(1).expand(-1,H*W,-1).contiguous().view(-1, 2) #AHW, 2
+
+    anchors_min = coords - anch/2
+    anchors_max = anchors_min + anch
+            
+    anchors = Variable(torch.cat((anchors_min, anchors_max), dim = 1), requires_grad = False)
+    boxes = offsets + anchors
+
+    return boxes, classes, anchors
+
+
 class ClassLoss(nn.Module):
     def __init__(self):
         super(ClassLoss, self).__init__()
-        self.cross_entropy = nn.CrossEntropyLoss(weight=torch.cuda.FloatTensor([1,3]), size_average=True, reduce=True)
+        self.sigmoid = nn.Sigmoid()
 
     def forward(self, classes, positive_idx):
         gather_pos = torch.zeros(classes.size(0), out=torch.LongTensor()).cuda()
         if len(positive_idx) != 0:
             positive_idx = positive_idx[:,0]
             gather_pos.index_fill_(0, positive_idx.data, 1)
-        indices = Variable(gather_pos)
+        indices = Variable(gather_pos.float())
 
-        loss = self.cross_entropy(classes, indices)
+        eps = 1e-10
+        gamma = 2
+        pred = self.sigmoid(classes)
+        loss = indices*((1-pred)**gamma)*torch.log(pred+eps) + (1-indices)*(pred**gamma)*torch.log(1-pred+eps)
+        loss = torch.sum(loss)
         return loss
 
 
@@ -248,6 +251,7 @@ class CoordLoss(nn.Module):
         else:
             return 0
 
+
 def match(threshhold, anchors, gts):
     pos = []
     idx = []
@@ -262,6 +266,7 @@ def match(threshhold, anchors, gts):
         return Variable(torch.cat(pos, dim=0)), Variable(torch.cat(idx, dim=0))
     else:
         return pos, idx
+    
     
 class Loss(nn.Module):
     def __init__(self):
@@ -288,3 +293,15 @@ class Loss(nn.Module):
         coord_loss = coord_loss / R / 1000
         total_loss = class_loss + coord_loss
         return total_loss, class_loss, coord_loss
+
+
+if __name__ == "__main__":
+    A = 6
+    height = 128
+    width = 128
+    offsets = Variable(torch.Tensor(3, 4*A, 32, 32))
+    classes = Variable(torch.Tensor(3, A, 32, 32))
+    anchors_wh2 = torch.Tensor([[16, 16],  [16, 16*2],
+                                [20, 20],  [20, 20*2],
+                                [25, 25],  [25, 25*2]])
+    result = make_anchors_and_bbox(offsets, classes, anchors_wh2, height, width)

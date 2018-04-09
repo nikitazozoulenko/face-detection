@@ -1,9 +1,11 @@
-#cross entropy, baseline model
+#focal loss softmax
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import torchvision
 from torchvision import models
+import torch.autograd as autograd
 from torch.autograd import Variable
 from torch.nn import Parameter
 import numpy as np
@@ -87,8 +89,6 @@ class RegressionHead(nn.Module):
         block_depth = 2
 
         res_0 = [ResidualBlock(channels, expansion, cardinality) for _ in range(block_depth)]
-        #upsample = nn.ConvTranspose2d(channels*expansion, channels*expansion, 3, stride=2, padding=1)
-        #upsample = nn.Upsample(scale_factor=2, mode="bilinear")
         res_1 = [ResidualBlock(channels, expansion, cardinality) for _ in range(block_depth)]
         self.residual = nn.Sequential(*res_0, *res_1)
 
@@ -117,8 +117,6 @@ class ClassificationHead(nn.Module):
         block_depth = 2
 
         res_0 = [ResidualBlock(channels, expansion, cardinality) for _ in range(block_depth)]
-        #upsample = nn.ConvTranspose2d(channels*expansion, channels*expansion, 3, stride=2, padding=1)
-        #upsample = nn.Upsample(scale_factor=2, mode="bilinear")
         res_1 = [ResidualBlock(channels, expansion, cardinality) for _ in range(block_depth)]
         self.residual = nn.Sequential(*res_0, *res_1)
 
@@ -174,7 +172,8 @@ class FaceNet(nn.Module):
         self.anchors_hw6 = torch.Tensor([[256, 256],  [256*2, 256],
                                          [322, 322],  [322*2, 322],
                                          [406, 406],  [406*2, 406]]).cuda()
-        
+
+
     def forward(self, x, phase = "train"):
         _, _, height, width = x.size()
         x = self.input_BN(x)
@@ -211,19 +210,25 @@ class FaceNet(nn.Module):
         anchors = torch.cat((anchors2, anchors3, anchors4, anchors5, anchors6), dim=0)
         return boxes, classes, anchors
 
+
 class ClassLoss(nn.Module):
     def __init__(self):
         super(ClassLoss, self).__init__()
         self.cross_entropy = nn.CrossEntropyLoss(weight=torch.cuda.FloatTensor([1,3]), size_average=True, reduce=True)
 
     def forward(self, classes, positive_idx):
+        num_pos = 1
         gather_pos = torch.zeros(classes.size(0), out=torch.LongTensor()).cuda()
         if len(positive_idx) != 0:
             positive_idx = positive_idx[:,0]
+            num_pos = float(positive_idx.size(0))
             gather_pos.index_fill_(0, positive_idx.data, 1)
         indices = Variable(gather_pos)
 
-        loss = self.cross_entropy(classes, indices)
+        gamma = Variable(torch.cuda.FloatTensor([2]))
+        weight = Variable(torch.cuda.FloatTensor([1,3]))
+        loss = FocalLoss.apply(classes, indices, gamma, weight)
+        loss = torch.sum(loss) / num_pos
         return loss
 
 
@@ -248,6 +253,7 @@ class CoordLoss(nn.Module):
         else:
             return 0
 
+
 def match(threshhold, anchors, gts):
     pos = []
     idx = []
@@ -263,6 +269,7 @@ def match(threshhold, anchors, gts):
     else:
         return pos, idx
     
+
 class Loss(nn.Module):
     def __init__(self):
         super(Loss, self).__init__()
@@ -288,3 +295,56 @@ class Loss(nn.Module):
         coord_loss = coord_loss / R / 1000
         total_loss = class_loss + coord_loss
         return total_loss, class_loss, coord_loss
+
+
+class FocalLoss(autograd.Function):
+    @staticmethod
+    def forward(ctx, classes, indices, gamma, weight):
+        """Compute the focal loss with indices
+        Args:
+            classes:    (Variable) Shape: [num_bboxes, C+1] Tensor with C+1 classes, (NOT SOFTMAXED)
+            indices:    (Variable) Shape: [num_bboxes]      Tensor with GT indices, 0<= value < C+1
+            gamma:      (Variable) Shape: [1]               The exponent for FL
+            weight:     (Variable) Shape: [C+1]             The "alpha" described in the paper, weight per class
+        Return:
+            focal_loss: (Variable) Shape: [1] Focal loss
+        """
+        ctx.save_for_backward(classes, indices, gamma, weight)
+        eps = 0.00001
+        
+        #get one_hot representation of indices
+        one_hot = torch.cuda.ByteTensor(classes.size()).zero_()
+        one_hot.scatter_(1, indices.unsqueeze(1), 1)
+        #calc softmax and logsoftmax
+        probs = F.softmax(Variable(classes), 1).data
+        probs = probs[one_hot]
+        logs = (probs+eps).log()
+        #get weights into the right shape
+        weights = torch.index_select(weight, 0, indices)
+        #calculate FL and sum
+        focal_loss = -weights * torch.pow((1-probs), gamma) * logs
+        return focal_loss
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        classes, indices, gamma, weight = ctx.saved_variables
+        eps = 0.00001
+
+        #get one_hot representation of indices
+        one_hot = torch.cuda.ByteTensor(classes.size()).zero_()
+        one_hot.scatter_(1, indices.data.unsqueeze(1), 1)
+        one_hot = Variable(one_hot)
+
+        #calc softmax and logsoftmax
+        probs = F.softmax(classes, 1)
+        probs_mask = probs[one_hot].unsqueeze(1)
+        logs_mask = (probs_mask+eps).log()
+
+        #get weights into the right shape
+        weights = torch.index_select(weight, 0, indices).unsqueeze(1)
+        
+        #gradient derived by hand, CE is when focal_change == 1
+        focal_factor = torch.pow((1-probs_mask), gamma-1) * (1 - probs_mask - gamma * logs_mask * probs_mask)
+        grad = weights * (probs - one_hot.float()) * focal_factor
+
+        return grad * grad_output.unsqueeze(1).expand(-1,2), None, None, None

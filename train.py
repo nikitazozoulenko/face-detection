@@ -2,7 +2,7 @@ import torch
 import torch.optim as optim
 import matplotlib.pyplot as plt
 
-from network_v_1_1 import FaceNet, Loss
+from network_v_1_2 import FaceNet, Loss
 from data_feeder import DataFeeder
 from util_detection import process_draw
 from process_data import get_paths_train, get_paths_val
@@ -25,6 +25,12 @@ def calc_loss(model, loss, data_feeder, i, total_logger, class_logger, coord_log
     return total_loss
 
 
+def increase_lr(optimizer):
+    for param_group in optimizer.param_groups:
+        print("updated learning rate: new lr:", param_group['lr']*10)
+        param_group['lr'] = param_group['lr']*10
+
+
 def decrease_lr(optimizer):
     for param_group in optimizer.param_groups:
         print("updated learning rate: new lr:", param_group['lr']/10)
@@ -42,10 +48,10 @@ def main():
 
     version = "01"
     model = FaceNet().cuda()
-    #model.load_state_dict(torch.load("savedir/facenet_01_it75k.pth"))
+    #model.load_state_dict(torch.load("savedir/facenet_01_it50k.pth"))
     loss = Loss().cuda()
 
-    optimizer = optim.SGD(model.parameters(), lr=1,
+    optimizer = optim.SGD(model.parameters(), lr=0.0001,
                       momentum=0.9, weight_decay=0.00001)
 
     t_total_logger= Logger("train_total_losses.txt")
@@ -55,7 +61,7 @@ def main():
     v_class_logger= Logger("val_class_losses.txt")
     v_coord_logger= Logger("val_coord_losses.txt")
 
-    for i in range(50001):
+    for i in range(3001):
         batch_loss = calc_loss(model, loss, train_data_feeder, i, t_total_logger, t_class_logger, t_coord_logger)
         train(batch_loss, optimizer)
         if i % 20 == 0:
@@ -63,11 +69,19 @@ def main():
             model.eval()
             calc_loss(model, loss, val_data_feeder, i, v_total_logger, v_class_logger, v_coord_logger)
             model.train()
-        if i in [40000]:
+        if i in [2000]:
             decrease_lr(optimizer)
         if i % 10000 == 0:
             torch.save(model.state_dict(), "savedir/facenet_"+version+"_it"+str(i//1000)+"k.pth")
-            
+    
+    model.eval()
+    for i in range(10):
+        _, batch = train_data_feeder.get_batch()
+        images, gt, num_objects = batch
+        images = images[0:1]
+        boxes, classes, anchors = model(images)
+        process_draw(0.3, images, boxes, classes, use_nms = False, softmax=True)
+
     train_data_feeder.kill_queue_threads()
     val_data_feeder.kill_queue_threads()
 

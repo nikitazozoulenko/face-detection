@@ -108,7 +108,7 @@ def nms(boxes, classes, threshhold, use_nms = True, softmax = False):
         mask = classes > threshhold
         idx = mask[:, 1].nonzero().squeeze()
         if not len(idx.size()):
-            return []
+            return [], []
         selected_boxes = boxes.index_select(0, idx)
         selected_classes = classes.index_select(0, idx)[:,1]
     else:
@@ -126,27 +126,35 @@ def nms(boxes, classes, threshhold, use_nms = True, softmax = False):
         selected_classes = classes.index_select(0, idx)
     
     if(not use_nms):
-        return selected_boxes
+        return selected_boxes, selected_classes
     
     confidences, indices = torch.sort(selected_classes, descending = True)
     boxes = selected_boxes[indices]
+    confs = selected_classes[indices]
 
     processed_boxes = []
+    processed_confs = []
     while len(boxes.size()):
         highest = boxes[0:1]
+        highest_conf = confs[0:1]
         processed_boxes += [highest]
+        processed_confs += [highest_conf]
         if boxes.size(0) == 1:
             break
         below = boxes[1:]
+        below_conf = confs[1:]
         
         ious = jaccard(below, highest)
-        mask = (ious < 0.5).expand(-1,4)
+        mask = (ious < 0.5)
+        confs = below_conf[mask.squeeze()]
+        mask = mask.expand(-1,4)
         boxes = below[mask].view(-1, 4)
+        
 
-    return torch.cat(processed_boxes, dim = 0)
+    return torch.cat(processed_boxes, dim = 0), torch.cat(processed_confs, dim = 0)
     
 def process_draw(threshhold, images, boxes, classes, use_nms = True, border_size = 6, colour = "red", softmax = False):
-    processed_boxes = nms(boxes, classes, threshhold, use_nms, softmax=softmax)
+    processed_boxes, processed_conf = nms(boxes, classes, threshhold, use_nms, softmax=softmax)
     return draw_and_show_boxes(images, processed_boxes, border_size, colour)
 
 ###I CANT FIGURE OUT HOW TO FIX MY OWN IOU FUNCTION,

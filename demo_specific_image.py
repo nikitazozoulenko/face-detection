@@ -15,13 +15,13 @@ from PIL import Image
 def test_model(images, model):
     boxes, classes, anchors = model(images)
     for i in [0.6, 0.9]:
-        im = process_draw(i, images, anchors, classes, use_nms = False, border_size = 6, softmax = True)
+        im = process_draw(i, images, anchors, classes, use_nms = True, border_size = 1, softmax = True)
         im.save("results" + str(i) +".png")
 
 
 def main():
     model = FaceNet().cuda()
-    model.load_state_dict(torch.load("savedir/facenet_01_it10k.pth"))
+    model.load_state_dict(torch.load("savedir/facenet_01_it50k.pth"))
     model.eval()
 
     num_iterations = 1
