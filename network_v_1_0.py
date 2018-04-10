@@ -200,7 +200,7 @@ class FaceNet(nn.Module):
         offsets3, classes3 = self.prediction_head(conv3)
         boxes3, classes3, anchors3 = make_anchors_and_bbox(offsets3, classes3, self.anchors_hw3, height, width)
         offsets2, classes2 = self.prediction_head(conv2)
-        boxes2, classes2, anchors2 = make_anchors_and_bbox(offsets2, classes2, self.anchors_hw3, height, width)
+        boxes2, classes2, anchors2 = make_anchors_and_bbox(offsets2, classes2, self.anchors_hw2, height, width)
 
         #concat all the predictions
         #boxes = [boxes3, boxes4, boxes5, boxes6, boxes7]

@@ -157,21 +157,21 @@ class FaceNet(nn.Module):
 
         self.prediction_head =  PredictionHead()
 
-        self.anchors_hw2 = torch.Tensor([[16, 16],  [16*2, 16],
-                                         [20, 20],  [20*2, 20],
-                                         [25, 25],  [25*2, 25]]).cuda()
-        self.anchors_hw3 = torch.Tensor([[32, 32],  [32*2, 32],
-                                         [40, 40],  [40*2, 40],
-                                         [51, 51],  [51*2, 51]]).cuda()
-        self.anchors_hw4 = torch.Tensor([[64, 64],  [64*2, 64],
-                                         [81, 81],  [81*2, 81],
-                                         [102, 102],  [102*2, 102]]).cuda()
-        self.anchors_hw5 = torch.Tensor([[128, 128],  [128*2, 128],
-                                         [161, 161],  [161*2, 161],
-                                         [203, 203],  [203*2, 203]]).cuda()
-        self.anchors_hw6 = torch.Tensor([[256, 256],  [256*2, 256],
-                                         [322, 322],  [322*2, 322],
-                                         [406, 406],  [406*2, 406]]).cuda()
+        self.anchors_hw2 = torch.Tensor([[16, 16],  [16, 16*2],
+                                         [20, 20],  [20, 20*2],
+                                         [25, 25],  [25, 25*2]]).cuda()
+        self.anchors_hw3 = torch.Tensor([[32, 32],  [32, 32*2],
+                                         [40, 40],  [40, 40*2],
+                                         [51, 51],  [51, 51*2]]).cuda()
+        self.anchors_hw4 = torch.Tensor([[64, 64],  [64, 64*2],
+                                         [81, 81],  [81, 81*2],
+                                         [102, 102],  [102, 102*2]]).cuda()
+        self.anchors_hw5 = torch.Tensor([[128, 128],  [128, 128*2],
+                                         [161, 161],  [161, 161*2],
+                                         [203, 203],  [203, 203*2]]).cuda()
+        self.anchors_hw6 = torch.Tensor([[256, 256],  [256, 256*2],
+                                         [322, 322],  [322, 322*2],
+                                         [406, 406],  [406, 406*2]]).cuda()
 
 
     def forward(self, x, phase = "train"):
@@ -199,7 +199,7 @@ class FaceNet(nn.Module):
         offsets3, classes3 = self.prediction_head(conv3)
         boxes3, classes3, anchors3 = make_anchors_and_bbox(offsets3, classes3, self.anchors_hw3, height, width)
         offsets2, classes2 = self.prediction_head(conv2)
-        boxes2, classes2, anchors2 = make_anchors_and_bbox(offsets2, classes2, self.anchors_hw3, height, width)
+        boxes2, classes2, anchors2 = make_anchors_and_bbox(offsets2, classes2, self.anchors_hw2, height, width)
 
         #concat all the predictions
         #boxes = [boxes3, boxes4, boxes5, boxes6, boxes7]
@@ -292,7 +292,7 @@ class Loss(nn.Module):
             class_loss += self.class_loss(classes, pos)
             coord_loss += self.coord_loss(boxes, gt, pos, idx)
         class_loss = class_loss / R
-        coord_loss = coord_loss / R / 1000
+        coord_loss = coord_loss / R /10
         total_loss = class_loss + coord_loss
         return total_loss, class_loss, coord_loss
 
