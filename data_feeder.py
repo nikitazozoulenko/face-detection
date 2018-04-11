@@ -111,7 +111,6 @@ class InputGen:
                 cropped_num_objects += 1
         if(cropped_num_objects==0):
             cropped_gt = [[0,0,0,0]]
-            cropped_num_objects = 1
         cropped_gt = np.array(cropped_gt).astype(np.float32)
 
         #horizontally flip image
@@ -122,6 +121,10 @@ class InputGen:
             cropped_gt[:, 2:3] = 1 - cropped_gt[:, 0:1]
             #xmin = 1-xmax
             cropped_gt[:, 0:1] = 1 - xmax_temp
+
+        if(cropped_num_objects==0):
+            cropped_gt = [[0,0,0,0]]
+            cropped_num_objects = 1
 
         #apply random jitter
         if self.use_jitter:

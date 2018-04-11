@@ -2,7 +2,7 @@ import torch
 import torch.optim as optim
 import matplotlib.pyplot as plt
 
-from network_v_1_0 import FaceNet, Loss
+from network_v_1_2 import FaceNet, Loss
 from data_feeder import DataFeeder
 from util_detection import process_draw
 from process_data import get_paths_train, get_paths_val
@@ -48,10 +48,10 @@ def main():
 
     version = "01"
     model = FaceNet().cuda()
-    #model.load_state_dict(torch.load("savedir/facenet_01_it50k.pth"))
+    #model.load_state_dict(torch.load("savedir/facenet_01_it70k.pth"))
     loss = Loss().cuda()
 
-    optimizer = optim.SGD(model.parameters(), lr=0.1,
+    optimizer = optim.SGD(model.parameters(), lr=0.001,
                       momentum=0.9, weight_decay=0.00001)
 
     t_total_logger= Logger("train_total_losses.txt")
@@ -69,19 +69,19 @@ def main():
             model.eval()
             calc_loss(model, loss, val_data_feeder, i, v_total_logger, v_class_logger, v_coord_logger)
             model.train()
-        if i in [50000]:
+        if i in [60000]:
             decrease_lr(optimizer)
-        if i % 10000 == 0 and i!=0:
+        if i % 1000 == 0 and i!=0:
             torch.save(model.state_dict(), "savedir/facenet_"+version+"_it"+str(i//1000)+"k.pth")
     
-    # model.eval()
-    # for i in range(100):
-    #     _, batch = train_data_feeder.get_batch()
-    #     images, gt, num_objects = batch
-    #     images = images[0:1]
-    #     boxes, classes, anchors = model(images)
-    #     #process_draw(0.05, images, anchors, classes, use_nms = False, softmax=True)
-    #     process_draw(0.9999, images, anchors, classes, use_nms = False, softmax=True, border_size=1)
+    model.eval()
+    for i in range(0):
+        _, batch = train_data_feeder.get_batch()
+        images, gt, num_objects = batch
+        images = images[0:1]
+        boxes, classes, anchors = model(images)
+        #process_draw(0.05, images, anchors, classes, use_nms = False, softmax=True)
+        process_draw(0.90, images, anchors, classes, use_nms = False, softmax=False, border_size=1)
 
     train_data_feeder.kill_queue_threads()
     val_data_feeder.kill_queue_threads()

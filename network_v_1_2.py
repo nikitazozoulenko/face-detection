@@ -217,16 +217,19 @@ class ClassLoss(nn.Module):
 
     def forward(self, classes, positive_idx):
         gather_pos = torch.zeros(classes.size(0), out=torch.LongTensor()).cuda()
+        num_pos = 1
         if len(positive_idx) != 0:
             positive_idx = positive_idx[:,0]
+            num_pos = float(positive_idx.size(0))
             gather_pos.index_fill_(0, positive_idx.data, 1)
         indices = Variable(gather_pos.float())
 
-        eps = 1e-10
-        gamma = 2
+        eps = 0.0000000001
+        gamma = 3
         pred = self.sigmoid(classes)
-        loss = indices*((1-pred)**gamma)*torch.log(pred+eps) + (1-indices)*(pred**gamma)*torch.log(1-pred+eps)
-        loss = torch.sum(loss)
+        loss = -indices*((1-pred)**gamma)*torch.log(pred+eps) - (1-indices)*(pred**gamma)*torch.log(1-pred+eps)
+        #loss = -indices*torch.log(pred+eps) - (1-indices)*torch.log(1-pred+eps)
+        loss = torch.sum(loss) / num_pos
         return loss
 
 
@@ -290,7 +293,7 @@ class Loss(nn.Module):
             class_loss += self.class_loss(classes, pos)
             coord_loss += self.coord_loss(boxes, gt, pos, idx)
         class_loss = class_loss / R
-        coord_loss = coord_loss / R / 1000
+        coord_loss = coord_loss / R
         total_loss = class_loss + coord_loss
         return total_loss, class_loss, coord_loss
 

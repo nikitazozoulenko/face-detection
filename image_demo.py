@@ -9,7 +9,7 @@ from torch.autograd import Variable
 import numpy as np
 import matplotlib.pyplot as plt
 
-from network_v_1_0 import FaceNet
+from network_v_1_1 import FaceNet
 from data_feeder import DataFeeder
 from process_data import get_paths_train, get_paths_val
 from util_detection import process_draw
@@ -21,11 +21,11 @@ train_data_feeder.start_queue_threads()
 val_data_feeder.start_queue_threads()
 
 model = FaceNet().cuda()
-model.load_state_dict(torch.load("savedir/facenet_01_it35k.pth"))
+model.load_state_dict(torch.load("savedir/facenet_01_it30k.pth"))
 model.eval()
 
 model2 = FaceNet().cuda()
-model2.load_state_dict(torch.load("savedir/facenet_01_it15k.pth"))
+model2.load_state_dict(torch.load("savedir/facenet_01_it70k.pth"))
 model2.eval()
 
 
@@ -37,7 +37,7 @@ def test_model(images, model):
     #process_draw(0.4, images, boxes, classes, use_nms = False, border_size = 1)
     #process_draw(0.5, images, boxes, classes, use_nms = False)
     #process_draw(0.6, images, anchors, classes, use_nms = False, border_size = 1)
-    process_draw(0.7, images, boxes, classes, use_nms = False, softmax=True)
+    process_draw(0.4, images, anchors, classes, use_nms = False, softmax=True)
     #process_draw(0.8, images, boxes, classes, use_nms = True)
     #process_draw(0.9, images, boxes, classes, use_nms = False)
     

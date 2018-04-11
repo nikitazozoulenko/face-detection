@@ -73,12 +73,22 @@ def sizes_WIDERFace(paths):
 
 
 if __name__ == "__main__":
-    paths = read_WIDERFace()
-    sizes = np.array(sizes_WIDERFace(paths[:]))
-    print(sizes)
-    print(sizes.shape)
+    # paths = read_WIDERFace()
+    # sizes = np.array(sizes_WIDERFace(paths[:]))
+    # print(sizes)
+    # print(sizes.shape)
 
-    pows = [(2**0.5)**x for x in range(20)]
-    import matplotlib.pyplot as plt
-    plt.hist(sizes, bins=pows)
-    plt.show()
+    # pows = [(2**0.5)**x for x in range(20)]
+    # import matplotlib.pyplot as plt
+    # plt.hist(sizes, bins=pows)
+    # plt.show()
+
+    from data_feeder import DataFeeder
+    train_data_feeder = DataFeeder(get_paths_train, preprocess_workers=1, cuda_workers=1,
+                                numpy_size=14, cuda_size=4, batch_size=1, jitter=False)
+    train_data_feeder.start_queue_threads()
+    for i in range(100):
+        _, batch = train_data_feeder.get_batch()
+        _, gt, num_objects = batch
+        print(gt)
+

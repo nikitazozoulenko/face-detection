@@ -6,7 +6,7 @@ import torch
 import torch.nn as nn
 from torch.autograd import Variable
 
-from network_v_1_0 import FaceNet
+from network_v_1_1 import FaceNet
 from util_detection import nms
 
 def path2cudaimage(filepath):
@@ -20,9 +20,9 @@ def path2cudaimage(filepath):
     return Variable(tensor, volatile=True)
 
 
-def run_model_on_img(model, cuda_img):
+def run_model_on_img(model, cuda_img, threshold):
     boxes, classes, anchors = model(cuda_img)
-    processed_boxes, processed_conf = nms(boxes, classes, threshhold=0.3, use_nms=True, softmax=True)
+    processed_boxes, processed_conf = nms(boxes, classes, threshhold=threshold, use_nms=True, softmax=True)
     return processed_boxes, processed_conf
 
 
@@ -43,7 +43,7 @@ def create_eval_txt(processed_boxes, processed_conf, cat, image_path):
 
 def create_txts():
     model = FaceNet().cuda()
-    model.load_state_dict(torch.load("savedir/facenet_01_it50k.pth"))
+    model.load_state_dict(torch.load("savedir/facenet_02_it6k.pth"))
     model.eval()
 
     if not os.path.exists("savedir/pred"):
@@ -53,7 +53,7 @@ def create_txts():
     for cat in os.listdir(im_dir):
         for image_path in os.listdir(im_dir + cat):
             cuda_img = path2cudaimage(im_dir + cat + "/"+ image_path)
-            processed_boxes, processed_conf = run_model_on_img(model, cuda_img)
+            processed_boxes, processed_conf = run_model_on_img(model, cuda_img, threshold=0.3)
             create_eval_txt(processed_boxes, processed_conf, cat, image_path)
 
 

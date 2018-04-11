@@ -49,46 +49,6 @@ def draw_gt(cuda_image, gt, num_objects):
     im.show()
 
 
-
-
-
-    
-    if len(boxes.size()) == 3:
-        boxes = boxes[0]
-    if len(classes.size()) == 3:
-        classes = classes[0]
-
-    classes = F.softmax(classes, dim=1)
-    mask = classes > threshhold
-    idx = mask[:, 1].nonzero().squeeze()
-    if not len(idx.size()):
-        return []
-    selected_boxes = boxes.index_select(0, idx)
-    selected_classes = classes.index_select(0, idx)[:,1]
-    
-    if(not use_nms):
-        return selected_boxes
-    
-    confidences, indices = torch.sort(selected_classes, descending = True)
-    boxes = selected_boxes[indices]
-
-    processed_boxes = []
-    while len(boxes.size()):
-        highest = boxes[0:1]
-        processed_boxes += [highest]
-        if boxes.size(0) == 1:
-            break
-        below = boxes[1:]
-        
-        ious = jaccard(below, highest)
-        mask = (ious < 0.5).expand(-1,4)
-        boxes = below[mask].view(-1, 4)
-
-    return torch.cat(processed_boxes, dim = 0)
-
-
-
-
 def nms(boxes, classes, threshhold, use_nms = True, softmax = False):
     """ Perform non-maxima suppression on the boudning boxes
     with detection probabilities as scores
@@ -121,7 +81,7 @@ def nms(boxes, classes, threshhold, use_nms = True, softmax = False):
         mask = classes > threshhold
         idx = mask.nonzero().squeeze()
         if not len(idx.size()):
-            return []
+            return [], []
         selected_boxes = boxes.index_select(0, idx)
         selected_classes = classes.index_select(0, idx)
     
