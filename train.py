@@ -2,7 +2,7 @@ import torch
 import torch.optim as optim
 import matplotlib.pyplot as plt
 
-from network_v_1_2 import FaceNet, Loss
+from network_v_1_0 import FaceNet, Loss
 from data_feeder import DataFeeder
 from util_detection import process_draw
 from process_data import get_paths_train, get_paths_val
@@ -39,9 +39,9 @@ def decrease_lr(optimizer):
 
 def main():
     train_data_feeder = DataFeeder(get_paths_train, preprocess_workers=4, cuda_workers=1,
-                                numpy_size=14, cuda_size=4, batch_size=8, jitter=True)
+                                numpy_size=14, cuda_size=4, batch_size=8, jitter=False)
     val_data_feeder = DataFeeder(get_paths_val, preprocess_workers=1, cuda_workers=1,
-                                numpy_size=6, cuda_size=1, batch_size=4, jitter = True,
+                                numpy_size=6, cuda_size=1, batch_size=1, jitter = False,
                                 volatile=True)
     train_data_feeder.start_queue_threads()
     val_data_feeder.start_queue_threads()
@@ -51,7 +51,7 @@ def main():
     #model.load_state_dict(torch.load("savedir/facenet_01_it50k.pth"))
     loss = Loss().cuda()
 
-    optimizer = optim.SGD(model.parameters(), lr=0.0001,
+    optimizer = optim.SGD(model.parameters(), lr=0.1,
                       momentum=0.9, weight_decay=0.00001)
 
     t_total_logger= Logger("train_total_losses.txt")
@@ -61,7 +61,7 @@ def main():
     v_class_logger= Logger("val_class_losses.txt")
     v_coord_logger= Logger("val_coord_losses.txt")
 
-    for i in range(100001):
+    for i in range(70001):
         batch_loss = calc_loss(model, loss, train_data_feeder, i, t_total_logger, t_class_logger, t_coord_logger)
         train(batch_loss, optimizer)
         if i % 20 == 0:
@@ -69,18 +69,19 @@ def main():
             model.eval()
             calc_loss(model, loss, val_data_feeder, i, v_total_logger, v_class_logger, v_coord_logger)
             model.train()
-        if i in [70000]:
+        if i in [50000]:
             decrease_lr(optimizer)
-        if i % 10000 == 0:
+        if i % 10000 == 0 and i!=0:
             torch.save(model.state_dict(), "savedir/facenet_"+version+"_it"+str(i//1000)+"k.pth")
     
-    model.eval()
-    for i in range(10):
-        _, batch = train_data_feeder.get_batch()
-        images, gt, num_objects = batch
-        images = images[0:1]
-        boxes, classes, anchors = model(images)
-        process_draw(0.3, images, boxes, classes, use_nms = False, softmax=True)
+    # model.eval()
+    # for i in range(100):
+    #     _, batch = train_data_feeder.get_batch()
+    #     images, gt, num_objects = batch
+    #     images = images[0:1]
+    #     boxes, classes, anchors = model(images)
+    #     #process_draw(0.05, images, anchors, classes, use_nms = False, softmax=True)
+    #     process_draw(0.9999, images, anchors, classes, use_nms = False, softmax=True, border_size=1)
 
     train_data_feeder.kill_queue_threads()
     val_data_feeder.kill_queue_threads()

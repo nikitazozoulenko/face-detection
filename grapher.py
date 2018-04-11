@@ -58,21 +58,21 @@ if __name__ == "__main__":
                   ["b", "g", "r"],
                   ["train total", "train class", "train coord"],
                   "Loss", "Iterations",
-                  list_ewmas = [0.9, 0.9, 0.9])
+                  list_ewmas = None)
     
     grapher.graph([v_tot, v_cls, v_coord],
                   [v_tot_ind, v_cls_ind, v_coord_ind],
                   ["b", "g", "r"],
                   ["val total", "val class", "val coord"],
                   "Loss", "Iterations",
-                  list_ewmas = [0.9, 0.9, 0.9])
+                  list_ewmas = None)
     
     grapher.graph([t_tot, v_tot],
                   [t_tot_ind, v_tot_ind],
                   ["b", "g"],
                   ["train total", "val total"],
                   "Loss", "Iterations",
-                  list_ewmas = [0.7, 0.7])
+                  list_ewmas =None)
 
     grapher.graph([t_cls, v_cls],
                   [t_cls_ind, v_cls_ind],
@@ -86,4 +86,4 @@ if __name__ == "__main__":
                   ["b", "g"],
                   ["train coord", "val coord"],
                   "Loss", "Iterations",
-                  list_ewmas = [0.7, 0.7])
+                  list_ewmas = None)

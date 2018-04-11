@@ -6,7 +6,7 @@ import torch.nn as nn
 from torch.autograd import Variable
 import numpy as np
 
-from network_v_1_2 import FaceNet
+from network_v_1_0 import FaceNet
 from data_feeder import DataFeeder
 from util_detection import process_draw
 from PIL import Image
