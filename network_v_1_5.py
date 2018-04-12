@@ -1,4 +1,4 @@
-#binary cross entropy
+#focal loss with feature pyramid, at every level
 
 import torch
 import torch.nn as nn
@@ -123,7 +123,8 @@ class FaceNet(nn.Module):
         self.conv5 = nn.Sequential(*modules_conv5)
         self.bottleneck_conv5 = nn.Conv2d(512, 256, kernel_size=1, stride=1, padding=0, bias = True)
 
-        self.conv6 = nn.Sequential(*[ResidualBlock(128, expansion=4) for _ in range(2)])
+        self.conv6 = nn.Sequential(nn.Conv2d(512, 512, kernel_size=1, stride=2, padding=0, bias = True),
+                                   *[ResidualBlock(128, expansion=4) for _ in range(2)])
         self.bottleneck_conv6 = nn.Conv2d(512, 256, kernel_size=1, stride=1, padding=0, bias = True)
 
         self.prediction_head =  PredictionHead()
@@ -143,6 +144,8 @@ class FaceNet(nn.Module):
         self.anchors_wh6 = torch.Tensor([[256, 256],  [256, 256*2],
                                          [322, 322],  [322, 322*2],
                                          [406, 406],  [406, 406*2]]).cuda()
+
+        self.upsampling = nn.Upsample(scale_factor=2, mode="bilinear")
         
     def forward(self, x, phase = "train"):
         _, _, height, width = x.size()
@@ -153,12 +156,12 @@ class FaceNet(nn.Module):
         conv4 = self.conv4(conv3)
         conv5 = self.conv5(conv4)
         conv6 = self.conv6(conv5)
-        
-        conv2 = self.bottleneck_conv2(conv2)
-        conv3 = self.bottleneck_conv3(conv3)
-        conv4 = self.bottleneck_conv4(conv4)
-        conv5 = self.bottleneck_conv5(conv5)
+
         conv6 = self.bottleneck_conv6(conv6)
+        conv5 = self.bottleneck_conv5(conv5) + self.upsampling(conv6)
+        conv4 = self.bottleneck_conv4(conv4) + self.upsampling(conv5)
+        conv3 = self.bottleneck_conv3(conv3) + self.upsampling(conv4)
+        conv2 = self.bottleneck_conv2(conv2) + self.upsampling(conv3)
 
         offsets6, classes6 = self.prediction_head(conv6)
         boxes6, classes6, anchors6 = make_anchors_and_bbox(offsets6, classes6, self.anchors_wh6, height, width)
@@ -175,9 +178,17 @@ class FaceNet(nn.Module):
         #boxes = [boxes3, boxes4, boxes5, boxes6, boxes7]
         #classes = [classes3, classes4, classes5, classes6, classes7]
         #anchors = [anchors3, anchors4, anchors5, anchors6, anchors7]
-        boxes = torch.cat((boxes2, boxes3, boxes4, boxes5, boxes6), dim=1)
-        classes =torch.cat((classes2, classes3, classes4, classes5, classes6), dim=1)
-        anchors = torch.cat((anchors2, anchors3, anchors4, anchors5, anchors6), dim=0)
+        #boxes = [boxes2, boxes3, boxes4, boxes5, boxes6]
+        #classes =[classes2, classes3, classes4, classes5, classes6]
+        #anchors = [anchors2, anchors3, anchors4, anchors5, anchors6]
+        if phase == "test":
+            boxes = torch.cat((boxes2, boxes3, boxes4, boxes5, boxes6), dim=1)
+            classes =torch.cat((classes2, classes3, classes4, classes5, classes6), dim=1)
+            anchors = torch.cat((anchors2, anchors3, anchors4, anchors5, anchors6), dim=0)
+        else:
+            boxes = [boxes2, boxes3, boxes4, boxes5, boxes6]
+            classes = [classes2, classes3, classes4, classes5, classes6]
+            anchors = [anchors2, anchors3, anchors4, anchors5, anchors6]
         return boxes, classes, anchors
 
 
@@ -213,16 +224,23 @@ def make_anchors_and_bbox(offsets, classes, anchors_wh, height, width):
 class ClassLoss(nn.Module):
     def __init__(self):
         super(ClassLoss, self).__init__()
-        self.binary_cross_entropy = nn.BCEWithLogitsLoss(size_average=True)
+        self.sigmoid = nn.Sigmoid()
 
     def forward(self, classes, positive_idx):
         gather_pos = torch.zeros(classes.size(0), out=torch.LongTensor()).cuda()
+        num_pos = 1
         if len(positive_idx) != 0:
             positive_idx = positive_idx[:,0]
+            num_pos = float(positive_idx.size(0))
             gather_pos.index_fill_(0, positive_idx.data, 1)
         indices = Variable(gather_pos.float())
 
-        loss = self.binary_cross_entropy(classes, indices)
+        eps = 0.0000000001
+        gamma = 3
+        pred = self.sigmoid(classes)
+        #loss = -indices*((1-pred)**gamma)*torch.log(pred+eps) - (1-indices)*(pred**gamma)*torch.log(1-pred+eps)
+        loss = -indices*torch.log(pred+eps) - (1-indices)*torch.log(1-pred+eps)
+        loss = torch.sum(loss) / num_pos
         return loss
 
 
@@ -270,7 +288,7 @@ class Loss(nn.Module):
         self.class_loss = ClassLoss()
         self.coord_loss = CoordLoss()
 
-    def forward(self, batch_boxes, batch_classes, anchors, batch_gt, batch_num_objects):
+    def forward(self, lvl_batch_boxes, lvl_batch_classes, lvl_anchors, batch_gt, batch_num_objects):
         #batch_boxes,      size [batch_size,       S*S*A,  4]
         #batch_classes,    size [batch_size,       S*S*A,  K+1]
         #batch_gt,         size [batch_size, max_num_obj,  4]
@@ -279,12 +297,12 @@ class Loss(nn.Module):
         R = batch_gt.size(0)
         class_loss = Variable(torch.zeros(1).cuda())
         coord_loss = Variable(torch.zeros(1).cuda())
-        
-        for boxes, classes, gt, num_objects in zip(batch_boxes, batch_classes, batch_gt, batch_num_objects):
-            gt = gt[:num_objects]
-            pos, idx = match(threshhold, anchors.data, gt.data)
-            class_loss += self.class_loss(classes, pos)
-            coord_loss += self.coord_loss(boxes, gt, pos, idx)
+        for batch_boxes, batch_classes, anchors in zip(lvl_batch_boxes, lvl_batch_classes, lvl_anchors):
+            for boxes, classes, gt, num_objects in zip(batch_boxes, batch_classes, batch_gt, batch_num_objects):
+                gt = gt[:num_objects]
+                pos, idx = match(threshhold, anchors.data, gt.data)
+                class_loss += self.class_loss(classes, pos)
+                coord_loss += self.coord_loss(boxes, gt, pos, idx)
         class_loss = class_loss / R
         coord_loss = coord_loss / R
         total_loss = class_loss + coord_loss

@@ -9,7 +9,7 @@ from torch.autograd import Variable
 import cv2
 
 from util_detection import nms
-from network_v_1_3 import FaceNet
+from network_v_1_4 import FaceNet
 
 class WebcamVideoStream:
     def __init__(self, src=0):
@@ -49,7 +49,7 @@ def numpy_to_cuda(numpy_array):
 
 
 model = FaceNet().cuda()
-model.load_state_dict(torch.load("savedir/facenet_01_it70k.pth"))
+model.load_state_dict(torch.load("savedir/facenet_01_it82k.pth"))
 model.eval()
     
 # created a *threaded* video stream, allow the camera sensor to warmup,
@@ -61,7 +61,7 @@ while True:
     
     cuda_frame = numpy_to_cuda(frame)
     boxes, classes, anchors = model(cuda_frame)
-    processed_boxes, processed_classes = nms(anchors, classes, 0.5, use_nms = False, softmax=False)
+    processed_boxes, processed_classes = nms(boxes, classes, 0.8, use_nms = True, softmax=False)
 
     for box in processed_boxes:
         box = box.int()

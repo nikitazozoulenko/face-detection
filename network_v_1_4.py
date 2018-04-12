@@ -1,4 +1,4 @@
-#binary focal loss with feature pyramid
+#cross entropy with feature pyramid
 
 import torch
 import torch.nn as nn
@@ -220,6 +220,7 @@ class ClassLoss(nn.Module):
     def __init__(self):
         super(ClassLoss, self).__init__()
         self.sigmoid = nn.Sigmoid()
+        self.cross_entropy = nn.BCEWithLogitsLoss(size_average=False)
 
     def forward(self, classes, positive_idx):
         gather_pos = torch.zeros(classes.size(0), out=torch.LongTensor()).cuda()
@@ -230,12 +231,12 @@ class ClassLoss(nn.Module):
             gather_pos.index_fill_(0, positive_idx.data, 1)
         indices = Variable(gather_pos.float())
 
-        eps = 0.0000000001
-        gamma = 3
-        pred = self.sigmoid(classes)
+        #eps = 0.0000000001
+        #gamma = 3
+        #pred = self.sigmoid(classes)
         #loss = -indices*((1-pred)**gamma)*torch.log(pred+eps) - (1-indices)*(pred**gamma)*torch.log(1-pred+eps)
-        loss = -indices*torch.log(pred+eps) - (1-indices)*torch.log(1-pred+eps)
-        loss = torch.sum(loss) / num_pos
+        #loss = -indices*torch.log(pred+eps) - (1-indices)*torch.log(1-pred+eps)
+        loss = self.cross_entropy(classes, indices) / num_pos
         return loss
 
 

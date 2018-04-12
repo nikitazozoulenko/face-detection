@@ -2,7 +2,7 @@ import torch
 import torch.optim as optim
 import matplotlib.pyplot as plt
 
-from network_v_1_4 import FaceNet, Loss
+from network_v_1_6 import FaceNet, Loss
 from data_feeder import DataFeeder
 from util_detection import process_draw
 from process_data import get_paths_train, get_paths_val
@@ -48,7 +48,7 @@ def main():
 
     version = "01"
     model = FaceNet().cuda()
-    #model.load_state_dict(torch.load("savedir/facenet_01_it70k.pth"))
+    #model.load_state_dict(torch.load("savedir/facenet_v_1_4.pth"))
     loss = Loss().cuda()
 
     optimizer = optim.SGD(model.parameters(), lr=0.0001,
@@ -71,7 +71,7 @@ def main():
             model.train()
         if i in [888888888]:
             decrease_lr(optimizer)
-        if i % 1000 == 0 and i!=0:
+        if i % 5000 == 0 and i!=0:
             torch.save(model.state_dict(), "savedir/facenet_"+version+"_it"+str(i//1000)+"k.pth")
     
     model.eval()
