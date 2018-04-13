@@ -86,4 +86,4 @@ if __name__ == "__main__":
                   ["b", "g"],
                   ["train coord", "val coord"],
                   "Loss", "Iterations",
-                  list_ewmas = None)
+                  list_ewmas = [0.9, 0.9])

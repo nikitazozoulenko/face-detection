@@ -6,22 +6,22 @@ import torch.nn as nn
 from torch.autograd import Variable
 import numpy as np
 
-from network_v_1_2 import FaceNet
+from network_v_1_5 import FaceNet
 from data_feeder import DataFeeder
 from util_detection import process_draw
 from PIL import Image
 
 
 def test_model(images, model):
-    boxes, classes, anchors = model(images)
-    for i in [0.2, 0.4, 0.7, 0.9, 0.95]:
+    boxes, classes, anchors = model(images, phase="test")
+    for i in [0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7]:
         im = process_draw(i, images, boxes, classes, use_nms = True, border_size = 1, softmax = False)
         im.save("results" + str(i) +".png")
 
 
 def main():
     model = FaceNet().cuda()
-    model.load_state_dict(torch.load("savedir/facenet_v_1_2.pth"))
+    model.load_state_dict(torch.load("savedir/facenet_v_1_5.pth"))
     model.eval()
 
     num_iterations = 1

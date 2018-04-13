@@ -2,7 +2,7 @@ import torch
 import torch.optim as optim
 import matplotlib.pyplot as plt
 
-from network_v_1_6 import FaceNet, Loss
+from network_v_1_3 import FaceNet, Loss
 from data_feeder import DataFeeder
 from util_detection import process_draw
 from process_data import get_paths_train, get_paths_val
@@ -46,9 +46,9 @@ def main():
     train_data_feeder.start_queue_threads()
     val_data_feeder.start_queue_threads()
 
-    version = "01"
+    version = "02"
     model = FaceNet().cuda()
-    #model.load_state_dict(torch.load("savedir/facenet_v_1_4.pth"))
+    model.load_state_dict(torch.load("savedir/facenet_v_1_3.pth"))
     loss = Loss().cuda()
 
     optimizer = optim.SGD(model.parameters(), lr=0.0001,
