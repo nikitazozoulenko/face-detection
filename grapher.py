@@ -79,7 +79,7 @@ if __name__ == "__main__":
                   ["b", "g"],
                   ["train class", "val class"],
                   "Loss", "Iterations",
-                  list_ewmas = None)
+                  list_ewmas = [0.001, 0.001])
     
     grapher.graph([t_coord, v_coord],
                   [t_coord_ind, v_coord_ind],

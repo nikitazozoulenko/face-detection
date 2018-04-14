@@ -1,4 +1,4 @@
-#cross entropy with feature pyramid with OHEM
+#cross entropy with feature pyramid, new threshold and bbox scale
 
 import torch
 import torch.nn as nn
@@ -76,7 +76,7 @@ class ClassificationHead(nn.Module):
     def __init__(self):
         super(ClassificationHead, self).__init__()
         A = 6
-        pi = 0.0000001
+        pi = 0.001
         bias = -np.log((1-pi)/pi)
         self.prior = Parameter(torch.FloatTensor([[bias]]).expand(A, -1, -1)).contiguous()
         
@@ -129,21 +129,21 @@ class FaceNet(nn.Module):
 
         self.prediction_head =  PredictionHead()
 
-        self.anchors_wh2 = torch.Tensor([[16, 16],  [16, 16*2],
-                                         [20, 20],  [20, 20*2],
-                                         [25, 25],  [25, 25*2]]).cuda()
-        self.anchors_wh3 = torch.Tensor([[32, 32],  [32, 32*2],
-                                         [40, 40],  [40, 40*2],
-                                         [51, 51],  [51, 51*2]]).cuda()
-        self.anchors_wh4 = torch.Tensor([[64, 64],  [64, 64*2],
-                                         [81, 81],  [81, 81*2],
-                                         [102, 102],  [102, 102*2]]).cuda()
-        self.anchors_wh5 = torch.Tensor([[128, 128],  [128, 128*2],
-                                         [161, 161],  [161, 161*2],
-                                         [203, 203],  [203, 203*2]]).cuda()
-        self.anchors_wh6 = torch.Tensor([[256, 256],  [256, 256*2],
-                                         [322, 322],  [322, 322*2],
-                                         [406, 406],  [406, 406*2]]).cuda()
+        self.anchors_wh2 = torch.Tensor([[16, 16],  [16, 16*1.5],
+                                         [20, 20],  [20, 20*1.5],
+                                         [25, 25],  [25, 25*1.5]]).cuda()
+        self.anchors_wh3 = torch.Tensor([[32, 32],  [32, 32*1.5],
+                                         [40, 40],  [40, 40*1.5],
+                                         [51, 51],  [51, 51*1.5]]).cuda()
+        self.anchors_wh4 = torch.Tensor([[64, 64],  [64, 64*1.5],
+                                         [81, 81],  [81, 81*1.5],
+                                         [102, 102],  [102, 102*1.5]]).cuda()
+        self.anchors_wh5 = torch.Tensor([[128, 128],  [128, 128*1.5],
+                                         [161, 161],  [161, 161*1.5],
+                                         [203, 203],  [203, 203*1.5]]).cuda()
+        self.anchors_wh6 = torch.Tensor([[256, 256],  [256, 256*1.5],
+                                         [322, 322],  [322, 322*1.5],
+                                         [406, 406],  [406, 406*1.5]]).cuda()
 
         self.upsampling = nn.Upsample(scale_factor=2, mode="bilinear")
         
@@ -219,10 +219,10 @@ def make_anchors_and_bbox(offsets, classes, anchors_wh, height, width):
 class ClassLoss(nn.Module):
     def __init__(self):
         super(ClassLoss, self).__init__()
-        self.sig_log = nn.LogSigmoid()
+        self.sigmoid = nn.Sigmoid()
         self.cross_entropy = nn.BCEWithLogitsLoss(size_average=False)
 
-    def forward(self, boxes, classes, positive_idx):
+    def forward(self, classes, positive_idx):
         gather_pos = torch.zeros(classes.size(0), out=torch.LongTensor()).cuda()
         num_pos = 1
         if len(positive_idx) != 0:
@@ -231,31 +231,12 @@ class ClassLoss(nn.Module):
             gather_pos.index_fill_(0, positive_idx.data, 1)
         indices = Variable(gather_pos.float())
 
-        eps = 0.0000000001
-        loss = -indices*self.sig_log(classes+eps) - (1-indices)*self.sig_log(1-classes+eps)
-
-        scores, indices = torch.topk(loss, 800)
-        bboxes = torch.index_select(boxes, 0, indices)
-
-        processed_boxes = []
-        processed_scores = []
-        while len(bboxes.size()) and len(processed_scores) < 128:
-            highest = bboxes[0:1]
-            highest_score = scores[0:1]
-            processed_boxes += [highest]
-            processed_scores += [highest_score]
-            if bboxes.size(0) == 1:
-                break
-            below = bboxes[1:]
-            below_score = scores[1:]
-            
-            ious = jaccard(below, highest)
-            mask = (ious < 0.5).data
-            scores = below_score[mask.squeeze()]
-            mask = mask.expand(-1,4)
-            bboxes = below[mask].view(-1, 4)
-
-        loss = torch.sum(torch.stack(processed_scores)) / num_pos
+        #eps = 0.0000000001
+        #gamma = 3
+        #pred = self.sigmoid(classes)
+        #loss = -indices*((1-pred)**gamma)*torch.log(pred+eps) - (1-indices)*(pred**gamma)*torch.log(1-pred+eps)
+        #loss = -indices*torch.log(pred+eps) - (1-indices)*torch.log(1-pred+eps)
+        loss = self.cross_entropy(classes, indices) / num_pos
         return loss
 
 
@@ -308,7 +289,7 @@ class Loss(nn.Module):
         #batch_classes,    size [batch_size,       S*S*A,  K+1]
         #batch_gt,         size [batch_size, max_num_obj,  4]
         #batch_num_objects size [batch_size, max_num_obj]
-        threshhold = 0.55
+        threshhold = 0.65
         R = batch_gt.size(0)
         class_loss = Variable(torch.zeros(1).cuda())
         coord_loss = Variable(torch.zeros(1).cuda())
@@ -316,7 +297,7 @@ class Loss(nn.Module):
         for boxes, classes, gt, num_objects in zip(batch_boxes, batch_classes, batch_gt, batch_num_objects):
             gt = gt[:num_objects]
             pos, idx = match(threshhold, anchors.data, gt.data)
-            class_loss += self.class_loss(boxes, classes, pos)
+            class_loss += self.class_loss(classes, pos)
             coord_loss += self.coord_loss(boxes, gt, pos, idx)
         class_loss = class_loss / R
         coord_loss = coord_loss / R

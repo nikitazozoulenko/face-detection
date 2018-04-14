@@ -49,7 +49,7 @@ def numpy_to_cuda(numpy_array):
 
 
 model = FaceNet().cuda()
-model.load_state_dict(torch.load("savedir/facenet_01_it82k.pth"))
+model.load_state_dict(torch.load("savedir/facenet_v_1_4.pth"))
 model.eval()
     
 # created a *threaded* video stream, allow the camera sensor to warmup,

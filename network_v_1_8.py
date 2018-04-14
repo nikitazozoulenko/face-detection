@@ -1,4 +1,4 @@
-#cross entropy with feature pyramid with OHEM
+#cross entropy with feature pyramid with OHEM only 128
 
 import torch
 import torch.nn as nn
@@ -234,28 +234,28 @@ class ClassLoss(nn.Module):
         eps = 0.0000000001
         loss = -indices*self.sig_log(classes+eps) - (1-indices)*self.sig_log(1-classes+eps)
 
-        scores, indices = torch.topk(loss, 800)
-        bboxes = torch.index_select(boxes, 0, indices)
+        # scores, indices = torch.topk(loss, 800)
+        # bboxes = torch.index_select(boxes, 0, indices)
 
-        processed_boxes = []
-        processed_scores = []
-        while len(bboxes.size()) and len(processed_scores) < 128:
-            highest = bboxes[0:1]
-            highest_score = scores[0:1]
-            processed_boxes += [highest]
-            processed_scores += [highest_score]
-            if bboxes.size(0) == 1:
-                break
-            below = bboxes[1:]
-            below_score = scores[1:]
+        # processed_boxes = []
+        # processed_scores = []
+        # while len(bboxes.size()) and len(processed_scores) < 128:
+        #     highest = bboxes[0:1]
+        #     highest_score = scores[0:1]
+        #     processed_boxes += [highest]
+        #     processed_scores += [highest_score]
+        #     if bboxes.size(0) == 1:
+        #         break
+        #     below = bboxes[1:]
+        #     below_score = scores[1:]
             
-            ious = jaccard(below, highest)
-            mask = (ious < 0.5).data
-            scores = below_score[mask.squeeze()]
-            mask = mask.expand(-1,4)
-            bboxes = below[mask].view(-1, 4)
+        #     ious = jaccard(below, highest)
+        #     mask = (ious < 0.5).data
+        #     scores = below_score[mask.squeeze()]
+        #     mask = mask.expand(-1,4)
+        #     bboxes = below[mask].view(-1, 4)
 
-        loss = torch.sum(torch.stack(processed_scores)) / num_pos
+        #loss = torch.sum(torch.stack(processed_scores)) / num_pos
         return loss
 
 
@@ -281,6 +281,34 @@ class CoordLoss(nn.Module):
             return 0
 
 
+def OHEM(list_class_losses, batch_boxes):
+    class_losses = torch.cat(list_class_losses, dim=0)
+    boxes = batch_boxes.view(-1, 4)
+
+    scores, indices = torch.topk(class_losses, 500)
+    bboxes = torch.index_select(boxes, 0, indices)
+
+    processed_boxes = []
+    processed_scores = []
+    while len(bboxes.size()) and len(processed_scores) < 128:
+        highest = bboxes[0:1]
+        highest_score = scores[0:1]
+        processed_boxes += [highest]
+        processed_scores += [highest_score]
+        if bboxes.size(0) == 1:
+            break
+        below = bboxes[1:]
+        below_score = scores[1:]
+            
+        ious = jaccard(below, highest)
+        mask = (ious < 0.5).data
+        scores = below_score[mask.squeeze()]
+        mask = mask.expand(-1,4)
+        bboxes = below[mask].view(-1, 4)
+
+    loss = torch.mean(torch.stack(processed_scores))
+    return loss
+
 def match(threshhold, anchors, gts):
     pos = []
     idx = []
@@ -295,7 +323,7 @@ def match(threshhold, anchors, gts):
         return Variable(torch.cat(pos, dim=0)), Variable(torch.cat(idx, dim=0))
     else:
         return pos, idx
-    
+
     
 class Loss(nn.Module):
     def __init__(self):
@@ -310,15 +338,15 @@ class Loss(nn.Module):
         #batch_num_objects size [batch_size, max_num_obj]
         threshhold = 0.55
         R = batch_gt.size(0)
-        class_loss = Variable(torch.zeros(1).cuda())
+        class_loss = []
         coord_loss = Variable(torch.zeros(1).cuda())
         
         for boxes, classes, gt, num_objects in zip(batch_boxes, batch_classes, batch_gt, batch_num_objects):
             gt = gt[:num_objects]
             pos, idx = match(threshhold, anchors.data, gt.data)
-            class_loss += self.class_loss(boxes, classes, pos)
+            class_loss += [self.class_loss(boxes, classes, pos)]
             coord_loss += self.coord_loss(boxes, gt, pos, idx)
-        class_loss = class_loss / R
+        class_loss = OHEM(class_loss, batch_boxes)
         coord_loss = coord_loss / R
         total_loss = class_loss + coord_loss
         return total_loss, class_loss, coord_loss

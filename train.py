@@ -2,7 +2,7 @@ import torch
 import torch.optim as optim
 import matplotlib.pyplot as plt
 
-from network_v_1_7 import FaceNet, Loss
+from network_v_1_9 import FaceNet, Loss
 from data_feeder import DataFeeder
 from util_detection import process_draw
 from process_data import get_paths_train, get_paths_val
@@ -41,14 +41,14 @@ def main():
     train_data_feeder = DataFeeder(get_paths_train, preprocess_workers=4, cuda_workers=1,
                                 numpy_size=14, cuda_size=4, batch_size=8, jitter=False)
     val_data_feeder = DataFeeder(get_paths_val, preprocess_workers=1, cuda_workers=1,
-                                numpy_size=6, cuda_size=1, batch_size=1, jitter = False,
+                                numpy_size=6, cuda_size=1, batch_size=8, jitter = False,
                                 volatile=True)
     train_data_feeder.start_queue_threads()
     val_data_feeder.start_queue_threads()
 
     version = "01"
     model = FaceNet().cuda()
-    #model.load_state_dict(torch.load("savedir/facenet_v_1_3.pth"))
+    #model.load_state_dict(torch.load("savedir/facenet_01_it10k.pth"))
     loss = Loss().cuda()
 
     optimizer = optim.SGD(model.parameters(), lr=0.0001,
@@ -69,7 +69,7 @@ def main():
             model.eval()
             calc_loss(model, loss, val_data_feeder, i, v_total_logger, v_class_logger, v_coord_logger)
             model.train()
-        if i in [888888888]:
+        if i in [40000, 55000]:
             decrease_lr(optimizer)
         if i % 5000 == 0 and i!=0:
             torch.save(model.state_dict(), "savedir/facenet_"+version+"_it"+str(i//1000)+"k.pth")
