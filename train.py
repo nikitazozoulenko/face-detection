@@ -2,7 +2,7 @@ import torch
 import torch.optim as optim
 import matplotlib.pyplot as plt
 
-from network_v_1_9 import FaceNet, Loss
+from network_v_2_4 import FaceNet, Loss
 from data_feeder import DataFeeder
 from util_detection import process_draw
 from process_data import get_paths_train, get_paths_val
@@ -39,9 +39,9 @@ def decrease_lr(optimizer):
 
 def main():
     train_data_feeder = DataFeeder(get_paths_train, preprocess_workers=4, cuda_workers=1,
-                                numpy_size=14, cuda_size=4, batch_size=8, jitter=False)
+                                numpy_size=14, cuda_size=4, batch_size=4, jitter=True)
     val_data_feeder = DataFeeder(get_paths_val, preprocess_workers=1, cuda_workers=1,
-                                numpy_size=6, cuda_size=1, batch_size=8, jitter = False,
+                                numpy_size=6, cuda_size=1, batch_size=4, jitter = False,
                                 volatile=True)
     train_data_feeder.start_queue_threads()
     val_data_feeder.start_queue_threads()
@@ -61,7 +61,7 @@ def main():
     v_class_logger= Logger("val_class_losses.txt")
     v_coord_logger= Logger("val_coord_losses.txt")
 
-    for i in range(100001):
+    for i in range(85001):
         batch_loss = calc_loss(model, loss, train_data_feeder, i, t_total_logger, t_class_logger, t_coord_logger)
         train(batch_loss, optimizer)
         if i % 20 == 0:
@@ -69,7 +69,7 @@ def main():
             model.eval()
             calc_loss(model, loss, val_data_feeder, i, v_total_logger, v_class_logger, v_coord_logger)
             model.train()
-        if i in [40000, 55000]:
+        if i in [70000, 80000]:
             decrease_lr(optimizer)
         if i % 5000 == 0 and i!=0:
             torch.save(model.state_dict(), "savedir/facenet_"+version+"_it"+str(i//1000)+"k.pth")

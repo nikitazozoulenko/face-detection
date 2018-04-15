@@ -6,15 +6,15 @@ import torch
 import torch.nn as nn
 from torch.autograd import Variable
 
-from network_v_1_1 import FaceNet
+from network_v_2_1 import FaceNet
 from util_detection import nms
 from util_detection import process_draw
 
 def path2cudaimage(filepath):
     im = Image.open(filepath)
     orig_width, orig_height = im.size
-    width = orig_width + 64 - orig_width%64
-    height = orig_height + 64 - orig_height%64
+    width = orig_width + 128 - orig_width%128
+    height = orig_height + 128 - orig_height%128
     im = im.resize((width, height))
     im_array = np.asarray(im)
     tensor = torch.from_numpy(im_array).cuda().permute(2,0,1).unsqueeze(0).float()
@@ -49,7 +49,7 @@ def create_eval_txt(processed_boxes, processed_conf, cat, image_path):
 def create_txts():
     model = FaceNet().cuda()
     #model.load_state_dict(torch.load("savedir/facenet_01_it70k.pth"))
-    model.load_state_dict(torch.load("savedir/facenet_v_1_1.pth"))
+    model.load_state_dict(torch.load("savedir/facenet_v_2_1.pth"))
     model.eval()
 
     if not os.path.exists("savedir/pred"):
