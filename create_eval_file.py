@@ -6,7 +6,7 @@ import torch
 import torch.nn as nn
 from torch.autograd import Variable
 
-from network_v_2_1 import FaceNet
+from network_v_2_4 import FaceNet
 from util_detection import nms
 from util_detection import process_draw
 
@@ -49,7 +49,7 @@ def create_eval_txt(processed_boxes, processed_conf, cat, image_path):
 def create_txts():
     model = FaceNet().cuda()
     #model.load_state_dict(torch.load("savedir/facenet_01_it70k.pth"))
-    model.load_state_dict(torch.load("savedir/facenet_v_2_1.pth"))
+    model.load_state_dict(torch.load("savedir/facenet_v_2_4.pth"))
     model.eval()
 
     if not os.path.exists("savedir/pred"):

@@ -6,7 +6,7 @@ import torch.nn as nn
 from torch.autograd import Variable
 import numpy as np
 
-from network_v_2_2 import FaceNet
+from network_v_2_4 import FaceNet
 from data_feeder import DataFeeder
 from util_detection import process_draw
 from PIL import Image
@@ -21,7 +21,7 @@ def test_model(images, model):
 
 def main():
     model = FaceNet().cuda()
-    model.load_state_dict(torch.load("savedir/facenet_01_it45k.pth"))
+    model.load_state_dict(torch.load("savedir/facenet_01_it85k.pth"))
     model.eval()
 
     num_iterations = 1
