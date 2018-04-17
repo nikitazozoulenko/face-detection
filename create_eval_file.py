@@ -6,10 +6,10 @@ import torch
 import torch.nn as nn
 from torch.autograd import Variable
 
-from network_v_2_4 import FaceNet
+from network_v_1_4 import FaceNet
 from util_detection import nms
 from util_detection import process_draw
-
+ctr = 0
 def path2cudaimage(filepath):
     im = Image.open(filepath)
     orig_width, orig_height = im.size
@@ -23,11 +23,16 @@ def path2cudaimage(filepath):
 
 def run_model_on_img(model, cuda_img, threshold, orig_width, orig_height, width, height):
     boxes, classes, anchors = model(cuda_img, phase="test")
+    process_draw(threshold, cuda_img, boxes, classes, use_nms = True, softmax=False)
     boxes[:,:,0:1] = boxes[:,:,0:1]*orig_width/width
     boxes[:,:,1:2] = boxes[:,:,1:2]*orig_height/height
     boxes[:,:,2:3] = boxes[:,:,2:3]*orig_width/width
     boxes[:,:,3:4] = boxes[:,:,3:4]*orig_height/height
     processed_boxes, processed_conf = nms(boxes, classes, threshhold=threshold, use_nms=True, softmax=False)
+    global ctr
+    ctr += 1
+    if ctr == 300:
+        assert True == False
     return processed_boxes, processed_conf
 
 
@@ -49,7 +54,7 @@ def create_eval_txt(processed_boxes, processed_conf, cat, image_path):
 def create_txts():
     model = FaceNet().cuda()
     #model.load_state_dict(torch.load("savedir/facenet_01_it70k.pth"))
-    model.load_state_dict(torch.load("savedir/facenet_v_2_4.pth"))
+    model.load_state_dict(torch.load("savedir/facenet_v_1_4.pth"))
     model.eval()
 
     if not os.path.exists("savedir/pred"):
@@ -59,7 +64,7 @@ def create_txts():
     for cat in os.listdir(im_dir):
         for image_path in os.listdir(im_dir + cat):
             cuda_img, orig_width, orig_height, width, height = path2cudaimage(im_dir + cat + "/"+ image_path)
-            processed_boxes, processed_conf = run_model_on_img(model, cuda_img, 0.05, orig_width, orig_height, width, height)
+            processed_boxes, processed_conf = run_model_on_img(model, cuda_img, 0.4, orig_width, orig_height, width, height)
             create_eval_txt(processed_boxes, processed_conf, cat, image_path)
 
 

@@ -14,19 +14,20 @@ from PIL import Image
 
 def test_model(images, model):
     boxes, classes, anchors = model(images, phase="test")
-    for i in [0.05, 0.7, 0.9]:
-        im = process_draw(i, images, boxes, classes, use_nms = True, border_size = 1, softmax = False)
+    for i in [0.15, 0.7, 0.9]:
+        im = process_draw(i, images, boxes, classes, use_nms = True, border_size = 4, softmax = False)
         im.save("results" + str(i) +".png")
 
 
 def main():
     model = FaceNet().cuda()
-    model.load_state_dict(torch.load("savedir/facenet_01_it85k.pth"))
+    model.load_state_dict(torch.load("savedir/facenet_v_2_4.pth"))
     model.eval()
 
     num_iterations = 1
     for i in range(num_iterations):
-        im = Image.open("/hdd/Images/crowd.jpg")
+        #im = Image.open("/hdd/Images/crowd.jpg")
+        im = Image.open("/hdd/Data/WIDERFace/WIDER_val/images/12--Group/12_Group_Group_12_Group_Group_12_935.jpg")
         width, height = im.size
         width = width + (128 - width%128)
         height = height + (128 - height%128)

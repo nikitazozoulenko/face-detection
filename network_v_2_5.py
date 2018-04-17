@@ -57,7 +57,7 @@ class RegressionHead(nn.Module):
         channels = 64
         expansion = 4
         cardinality = 1
-        block_depth = 4
+        block_depth = 2
 
         res_0 = [ResidualBlock(channels, expansion, cardinality) for _ in range(block_depth)]
         res_1 = [ResidualBlock(channels, expansion, cardinality) for _ in range(block_depth)]
@@ -87,7 +87,7 @@ class ClassificationHead(nn.Module):
         channels = 64
         expansion = 4
         cardinality = 1
-        block_depth = 4
+        block_depth = 2
 
         res_0 = [ResidualBlock(channels, expansion, cardinality) for _ in range(block_depth)]
         res_1 = [ResidualBlock(channels, expansion, cardinality) for _ in range(block_depth)]
@@ -106,7 +106,7 @@ class ClassificationHead(nn.Module):
 class FaceNet(nn.Module):
     def __init__(self):
         super(FaceNet, self).__init__()
-        resnet = models.resnet101(pretrained=True)
+        resnet = models.resnet50(pretrained=True)
         modules_conv2 = list(resnet.children())[:5]
         modules_conv3 = list(resnet.children())[5]
         modules_conv4 = list(resnet.children())[6]
@@ -249,11 +249,6 @@ class ClassLoss(nn.Module):
             gather_pos.index_fill_(0, positive_idx.data, 1)
         indices = Variable(gather_pos.float())
 
-        #eps = 0.0000000001
-        #gamma = 3
-        #pred = self.sigmoid(classes)
-        #loss = -indices*((1-pred)**gamma)*torch.log(pred+eps) - (1-indices)*(pred**gamma)*torch.log(1-pred+eps)
-        #loss = -indices*torch.log(pred+eps) - (1-indices)*torch.log(1-pred+eps)
         loss = self.cross_entropy(classes, indices) / num_pos
         return loss
 
