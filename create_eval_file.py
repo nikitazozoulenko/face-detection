@@ -23,14 +23,18 @@ def path2cudaimage(filepath):
 
 def run_model_on_img(model, cuda_img, threshold, orig_width, orig_height, width, height):
     boxes, classes, anchors = model(cuda_img, phase="test")
-    process_draw(threshold, cuda_img, boxes, classes, use_nms = True, softmax=False)
+    #process_draw(threshold, cuda_img, boxes, classes, use_nms = True, softmax=False)
     boxes[:,:,0:1] = boxes[:,:,0:1]*orig_width/width
     boxes[:,:,1:2] = boxes[:,:,1:2]*orig_height/height
     boxes[:,:,2:3] = boxes[:,:,2:3]*orig_width/width
     boxes[:,:,3:4] = boxes[:,:,3:4]*orig_height/height
     processed_boxes, processed_conf = nms(boxes, classes, threshhold=threshold, use_nms=True, softmax=False)
     global ctr
+    print(ctr)
     ctr += 1
+    if ctr > 200:
+        boxes, classes, anchors = model(cuda_img, phase="test")
+        process_draw(threshold, cuda_img, boxes, classes, use_nms = True, softmax=False)
     if ctr == 300:
         assert True == False
     return processed_boxes, processed_conf
@@ -64,7 +68,7 @@ def create_txts():
     for cat in os.listdir(im_dir):
         for image_path in os.listdir(im_dir + cat):
             cuda_img, orig_width, orig_height, width, height = path2cudaimage(im_dir + cat + "/"+ image_path)
-            processed_boxes, processed_conf = run_model_on_img(model, cuda_img, 0.4, orig_width, orig_height, width, height)
+            processed_boxes, processed_conf = run_model_on_img(model, cuda_img, 0.6, orig_width, orig_height, width, height)
             create_eval_txt(processed_boxes, processed_conf, cat, image_path)
 
 

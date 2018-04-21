@@ -39,9 +39,9 @@ def decrease_lr(optimizer):
 
 def main():
     train_data_feeder = DataFeeder(get_paths_train, preprocess_workers=4, cuda_workers=1,
-                                numpy_size=14, cuda_size=4, batch_size=5, jitter=True)
+                                numpy_size=14, cuda_size=4, batch_size=4, jitter=True)
     val_data_feeder = DataFeeder(get_paths_val, preprocess_workers=1, cuda_workers=1,
-                                numpy_size=6, cuda_size=1, batch_size=5, jitter = False,
+                                numpy_size=6, cuda_size=1, batch_size=4, jitter = False,
                                 volatile=True)
     train_data_feeder.start_queue_threads()
     val_data_feeder.start_queue_threads()
