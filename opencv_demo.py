@@ -10,14 +10,14 @@ from torch.autograd import Variable
 import cv2
 
 from util_detection import nms
-from network_v_2_0 import FaceNet
+from network_v_2_3 import FaceNet
 
 class WebcamVideoStream:
     def __init__(self, src=0):
 	# initialize the video camera stream and read the first frame
 	# from the stream
         self.stream = cv2.VideoCapture(src)
-        (self.grabbed, self.frame) = self.stream.read()
+        self.grabbed, self.frame = self.stream.read()
  
 	# initialize the variable used to indicate if the thread should
 	# be stopped
@@ -35,7 +35,7 @@ class WebcamVideoStream:
             if self.stopped:
                 return
             # otherwise, read the next frame from the stream
-            (self.grabbed, self.frame) = self.stream.read()
+            self.grabbed, self.frame = self.stream.read()
  
     def read(self):
         # return the frame most recently read
@@ -50,22 +50,18 @@ def numpy_to_cuda(numpy_array):
 
 
 model = FaceNet().cuda()
-model.load_state_dict(torch.load("savedir/facenet_v_2_0.pth"))
+model.load_state_dict(torch.load("savedir/facenet_pref.pth"))
 model.eval()
     
-# created a *threaded* video stream, allow the camera sensor to warmup,
-# and start the FPS counter
 stream = WebcamVideoStream(src=0).start()
 while True:
+    now = time.time()
     frame = stream.read()
     frame = cv2.resize(frame, (640, 512))
     
     cuda_frame = numpy_to_cuda(frame)
-    now = time.time()
     boxes, classes, anchors = model(cuda_frame)
     processed_boxes, processed_classes = nms(anchors, classes, 0.8, use_nms = True, softmax=False)
-    then = time.time()
-    print(then-now)
 
     for box in processed_boxes:
         box = box.int()
@@ -78,6 +74,9 @@ while True:
     # check to see if the frame should be displayed to our screen
     cv2.imshow("Frame", frame)
     key = cv2.waitKey(1) & 0xFF
+
+    then = time.time()
+    print(1/(then-now))
  
 cv2.destroyAllWindows()
                 

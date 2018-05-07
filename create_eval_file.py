@@ -6,15 +6,34 @@ import torch
 import torch.nn as nn
 from torch.autograd import Variable
 
-from network_v_1_4 import FaceNet
+from network_v_2_4 import FaceNet
 from util_detection import nms
 from util_detection import process_draw
 ctr = 0
 def path2cudaimage(filepath):
     im = Image.open(filepath)
     orig_width, orig_height = im.size
-    width = orig_width + 128 - orig_width%128
-    height = orig_height + 128 - orig_height%128
+    ratio = orig_width/orig_height
+
+    if ratio >1:
+        height = 1408- 128*5
+        width = height * ratio
+    else:
+        width = 1408- 128*5
+        height = width/ratio
+
+    if width % 128 > 128//2:
+        width = width + 128 - width % 128
+    else:
+        width = width- width % 128
+
+    if height % 128 > 128//2:
+        height = height + 128 - height % 128
+    else:
+        height = height - height % 128
+    height = int(height)
+    width = int(width)
+
     im = im.resize((width, height))
     im_array = np.asarray(im)
     tensor = torch.from_numpy(im_array).cuda().permute(2,0,1).unsqueeze(0).float()
@@ -29,14 +48,14 @@ def run_model_on_img(model, cuda_img, threshold, orig_width, orig_height, width,
     boxes[:,:,2:3] = boxes[:,:,2:3]*orig_width/width
     boxes[:,:,3:4] = boxes[:,:,3:4]*orig_height/height
     processed_boxes, processed_conf = nms(boxes, classes, threshhold=threshold, use_nms=True, softmax=False)
-    global ctr
-    print(ctr)
-    ctr += 1
-    if ctr > 200:
-        boxes, classes, anchors = model(cuda_img, phase="test")
-        process_draw(threshold, cuda_img, boxes, classes, use_nms = True, softmax=False)
-    if ctr == 300:
-        assert True == False
+    # global ctr
+    # print(ctr)
+    # ctr += 1
+    # if ctr > 10:
+    #     boxes, classes, anchors = model(cuda_img, phase="test")
+    #     process_draw(threshold, cuda_img, boxes, classes, use_nms = True, softmax=False)
+    # if ctr == 50:
+    #     assert True == False
     return processed_boxes, processed_conf
 
 
@@ -58,7 +77,7 @@ def create_eval_txt(processed_boxes, processed_conf, cat, image_path):
 def create_txts():
     model = FaceNet().cuda()
     #model.load_state_dict(torch.load("savedir/facenet_01_it70k.pth"))
-    model.load_state_dict(torch.load("savedir/facenet_v_1_4.pth"))
+    model.load_state_dict(torch.load("savedir/facenet_v_2_4.pth"))
     model.eval()
 
     if not os.path.exists("savedir/pred"):
@@ -68,7 +87,7 @@ def create_txts():
     for cat in os.listdir(im_dir):
         for image_path in os.listdir(im_dir + cat):
             cuda_img, orig_width, orig_height, width, height = path2cudaimage(im_dir + cat + "/"+ image_path)
-            processed_boxes, processed_conf = run_model_on_img(model, cuda_img, 0.6, orig_width, orig_height, width, height)
+            processed_boxes, processed_conf = run_model_on_img(model, cuda_img, 0.01, orig_width, orig_height, width, height)
             create_eval_txt(processed_boxes, processed_conf, cat, image_path)
 
 

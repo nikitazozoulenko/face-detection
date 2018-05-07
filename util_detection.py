@@ -21,7 +21,7 @@ def draw_and_show_boxes(cuda_image, list_boxes, border_size, color):
         y1 = box[3]
 
         for j in range(border_size):
-            final_coords = [x0+j, y0+j, x1-j, y1-j]
+            final_coords = [x0-j, y0-j, x1+j, y1+j]
             dr.rectangle(final_coords, outline = color)
     im.show()
     return im
